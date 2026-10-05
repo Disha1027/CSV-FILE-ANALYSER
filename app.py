@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 import base64
+from streamlit.errors import StreamlitSecretNotFoundError
 
 # Import modules
 from modules.input_module import DataLoader
@@ -64,7 +65,10 @@ def show_table(frame):
     st.markdown(f'<div class="results-table-wrap">{html}</div>', unsafe_allow_html=True)
 
 # Require Google sign-in before rendering any analyzer functionality.
-auth_config = st.secrets.get("auth")
+try:
+    auth_config = st.secrets.get("auth")
+except StreamlitSecretNotFoundError:
+    auth_config = None
 if not auth_config:
     st.markdown(
         '<div class="login-layout"><section class="login-art"><div class="login-brand"><span class="login-brand-mark">▥</span> Data Studio</div><div class="login-chart"><div class="login-chart-top"><i></i><i></i><i></i></div><div class="login-chart-grid"><i></i><i></i><i></i><i></i><i></i><i></i></div></div><div class="login-art-copy"><h2>Good data starts with a clear view.</h2><p>Explore your CSV files, spot patterns, and turn numbers into useful insights.</p></div></section><section class="login-right"><div class="login-kicker">CSV DATA ANALYZER</div><h1>Almost there!</h1><p>Sign-in needs a quick setup before you can open your workspace.</p><p><b>Google sign-in isn’t configured yet.</b><br>Follow the setup steps in the project README, then refresh this page.</p></section></div>',
