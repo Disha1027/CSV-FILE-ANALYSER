@@ -1,6 +1,8 @@
-streamlit[auth]>=1.42.0
-pandas 
-matplotlib 
-seaborn 
-scikit-learn 
+streamlit[auth]>=1.55.0
+pandas
+matplotlib
+seaborn
+scikit-learn
 google-generativeai
+scipy
+statsmodels

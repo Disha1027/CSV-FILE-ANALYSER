@@ -2,6 +2,7 @@ import pandas as pd
 import streamlit as st
 import io
 import base64
+import hashlib
 
 class DataLoader:
     """
@@ -15,6 +16,14 @@ class DataLoader:
             st.session_state.data = None
         if 'filename' not in st.session_state:
             st.session_state.filename = None
+        if 'file_size_bytes' not in st.session_state:
+            st.session_state.file_size_bytes = None
+        if 'original_data' not in st.session_state:
+            st.session_state.original_data = None
+        if 'upload_signature' not in st.session_state:
+            st.session_state.upload_signature = None
+        if 'transformations' not in st.session_state:
+            st.session_state.transformations = []
     
     def create_upload_widget(self):
         """
@@ -38,10 +47,21 @@ class DataLoader:
         """
         if uploaded_file is not None:
             try:
+                signature = hashlib.sha256(uploaded_file.getvalue()).hexdigest()
+                if signature == st.session_state.upload_signature and st.session_state.data is not None:
+                    return True
                 # Read the CSV file
                 df = pd.read_csv(uploaded_file)
+                if df.empty or df.shape[1] == 0:
+                    raise ValueError("The CSV contains no data rows to analyze.")
                 st.session_state.data = df
+                st.session_state.original_data = df.copy(deep=True)
+                st.session_state.transformations = []
+                st.session_state.upload_signature = signature
+                for key in ("eda_anomaly_result", "eda_time_result"):
+                    st.session_state.pop(key, None)
                 st.session_state.filename = uploaded_file.name
+                st.session_state.file_size_bytes = getattr(uploaded_file, "size", None)
                 return True
             except Exception as e:
                 st.error(f"Error: {e}")
@@ -90,12 +110,33 @@ class DataLoader:
             
             return {
                 "filename": st.session_state.filename,
+                "file_size_bytes": st.session_state.file_size_bytes,
                 "rows": df.shape[0],
                 "columns": df.shape[1],
                 "memory_usage": memory_str,
                 "missing_values": missing_values
             }
         return None
+
+    def remove_duplicates(self, subset=None):
+        """Apply explicit duplicate removal while retaining the original frame for reset."""
+        if st.session_state.data is None:
+            return 0
+        before = len(st.session_state.data)
+        st.session_state.data = st.session_state.data.drop_duplicates(subset=subset).copy()
+        for key in ("eda_anomaly_result", "eda_time_result"):
+            st.session_state.pop(key, None)
+        removed = before - len(st.session_state.data)
+        st.session_state.transformations.append({"operation": "remove_duplicates", "subset": subset, "rows_removed": removed})
+        return removed
+
+    def reset_data(self):
+        """Restore the exact uploaded frame and clear recorded transformations."""
+        if st.session_state.original_data is not None:
+            st.session_state.data = st.session_state.original_data.copy(deep=True)
+            st.session_state.transformations = []
+            for key in ("eda_anomaly_result", "eda_time_result"):
+                st.session_state.pop(key, None)
     
     def get_column_info(self):
         """
@@ -112,7 +153,7 @@ class DataLoader:
                 dtype = str(df[col].dtype)
                 unique = df[col].nunique()
                 missing = df[col].isnull().sum()
-                missing_pct = (missing / len(df)) * 100
+                missing_pct = (missing / max(len(df), 1)) * 100
                 
                 col_info.append({
                     "Column": col,

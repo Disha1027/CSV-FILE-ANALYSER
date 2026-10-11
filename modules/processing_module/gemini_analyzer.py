@@ -221,7 +221,7 @@ class GeminiAnalyzer:
         
         try:
             # Configure Gemini model
-            model = genai.GenerativeModel('gemini-2.0-flash')
+            model = genai.GenerativeModel('gemini-3.8-flash')
             # st.write(f"PASSING PROMPT: {prompt}")
             
             # Generate response
@@ -229,11 +229,17 @@ class GeminiAnalyzer:
             response = model.generate_content(prompt)
             # st.write(f"MODEL OUTPUT: {response.candidates[0].content.parts[0].text}")
 
-            return response.candidates[0].content.parts[0].text
+            return response.text or "Gemini returned an empty response. Try another analysis type or prompt."
         
         except Exception as e:
-            st.error(f"Error generating AI analysis: {e}")
-            st.info("Please check your API key and try again.")
+            error_text = str(e)
+            st.error(f"Error generating AI analysis: {error_text}")
+            if "404" in error_text or "not found" in error_text.lower() or "no longer available" in error_text.lower():
+                st.info("The model was unavailable. The app now uses Gemini 3.8 Flash; restart Streamlit and try again.")
+            elif "api key" in error_text.lower() or "permission" in error_text.lower() or "403" in error_text:
+                st.info("Gemini rejected this key. Check that it is active and enabled for the Gemini API, then paste the key again.")
+            else:
+                st.info("Check your internet connection and try again. Your API key is not shown here.")
             return None
     
     def get_analysis_types(self):
