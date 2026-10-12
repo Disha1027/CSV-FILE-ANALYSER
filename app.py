@@ -494,6 +494,10 @@ with st.sidebar:
             upload_event_id = str(getattr(uploaded_file, "file_id", "") or f"{uploaded_file.name}:{uploaded_file.size}")
             if st.session_state.get("_active_file_id") != upload_event_id:
                 st.session_state["_active_file_id"] = upload_event_id
+                for export_key in ("_prepared_master_pdf", "_prepared_master_zip"):
+                    st.session_state.pop(export_key, None)
+                for export_key in [key for key in st.session_state if key.startswith("_prepared_section_pdf_")]:
+                    st.session_state.pop(export_key, None)
                 st.session_state["analysis_given"] = False
 
             success = data_loader.load_data(uploaded_file)
@@ -536,54 +540,10 @@ with st.sidebar:
         activity_log.record(user_email, "gemini_api_key_configured")
         st.session_state["_activity_gemini_key_logged"] = True
 
-    # Final Download in Sidebar (available once analysis is active)
     if data_loader.get_data() is not None and st.session_state.get("analysis_given", False):
         st.markdown("---")
         st.subheader("Final Download (All Sections)")
-        st.caption("Comprehensive export covering all 8 sections:")
-        processed_name = (data_loader.get_filename() or "data.csv").rsplit(".", 1)[0]
-        sb_col1, sb_col2 = st.columns(2)
-        with sb_col1:
-            master_pdf_bytes = generate_pdf_report(
-                data_loader=data_loader,
-                data_profiler=data_profiler,
-                data_quality_analyzer=data_quality_analyzer,
-                statistical_analyzer=statistical_analyzer,
-                gemini_analysis_text=st.session_state.get("_latest_gemini_response"),
-                automated_insights=automated_insights,
-                advanced_visualizer=advanced_visualizer,
-                time_series_analyzer=time_series_analyzer,
-                section="all",
-            )
-            st.download_button(
-                label="Master PDF Report",
-                data=master_pdf_bytes,
-                file_name=f"{processed_name}_master_analysis_report.pdf",
-                mime="application/pdf",
-                key="sidebar_master_pdf",
-                on_click=lambda: activity_log.record(user_email, "master_pdf_downloaded"),
-                use_container_width=True,
-            )
-        with sb_col2:
-            archive_zip_bytes = generate_full_archive_zip(
-                data_loader=data_loader,
-                data_profiler=data_profiler,
-                data_quality_analyzer=data_quality_analyzer,
-                statistical_analyzer=statistical_analyzer,
-                gemini_analysis_text=st.session_state.get("_latest_gemini_response"),
-                automated_insights=automated_insights,
-                advanced_visualizer=advanced_visualizer,
-                time_series_analyzer=time_series_analyzer,
-            )
-            st.download_button(
-                label="Complete Archive (ZIP)",
-                data=archive_zip_bytes,
-                file_name=f"{processed_name}_complete_analysis_archive.zip",
-                mime="application/zip",
-                key="sidebar_all_zip",
-                on_click=lambda: activity_log.record(user_email, "archive_zip_downloaded"),
-                use_container_width=True,
-            )
+        st.caption("Complete PDF and ZIP exports are available at the bottom of the workspace. They are generated only when requested.")
 
 if data_loader.get_data() is None:
     st.markdown('<h1 class="main-header">CSV File Analyser</h1>', unsafe_allow_html=True)
@@ -625,51 +585,32 @@ else:
         st.markdown("---")
         st.markdown(f'<h4 class="sub-header">Downloads for {sec_title}</h4>', unsafe_allow_html=True)
         base_name = (data_loader.get_filename() or "data.csv").rsplit(".", 1)[0]
-
-        col_sec, col_whole = st.columns(2)
-
-        with col_sec:
-            pdf_data = generate_pdf_report(
-                data_loader=data_loader,
-                data_profiler=data_profiler,
-                data_quality_analyzer=data_quality_analyzer,
-                statistical_analyzer=statistical_analyzer,
-                gemini_analysis_text=st.session_state.get("_latest_gemini_response"),
-                automated_insights=automated_insights,
-                advanced_visualizer=advanced_visualizer,
-                time_series_analyzer=time_series_analyzer,
-                section=sec_id,
-            )
+        state_key = f"_prepared_section_pdf_{sec_id}"
+        upload_signature = st.session_state.get("upload_signature")
+        if st.button(f"Prepare {sec_title} PDF", key=f"prepare_pdf_{sec_id}"):
+            with st.spinner(f"Preparing the {sec_title} PDF..."):
+                pdf_data = generate_pdf_report(
+                    data_loader=data_loader,
+                    data_profiler=data_profiler,
+                    data_quality_analyzer=data_quality_analyzer,
+                    statistical_analyzer=statistical_analyzer,
+                    gemini_analysis_text=st.session_state.get("_latest_gemini_response"),
+                    automated_insights=automated_insights,
+                    advanced_visualizer=advanced_visualizer,
+                    time_series_analyzer=time_series_analyzer,
+                    section=sec_id,
+                )
+            st.session_state[state_key] = (upload_signature, pdf_data)
+        prepared = st.session_state.get(state_key)
+        if prepared and prepared[0] == upload_signature:
             st.download_button(
                 label=f"Download {sec_title} Analysis",
-                data=pdf_data,
+                data=prepared[1],
                 file_name=f"{base_name}_{sec_id}_analysis.pdf",
                 mime="application/pdf",
                 key=f"dl_sec_{sec_id}",
                 use_container_width=True,
                 on_click=lambda: activity_log.record(user_email, f"section_pdf_downloaded_{sec_id}"),
-            )
-
-        with col_whole:
-            master_pdf_data = generate_pdf_report(
-                data_loader=data_loader,
-                data_profiler=data_profiler,
-                data_quality_analyzer=data_quality_analyzer,
-                statistical_analyzer=statistical_analyzer,
-                gemini_analysis_text=st.session_state.get("_latest_gemini_response"),
-                automated_insights=automated_insights,
-                advanced_visualizer=advanced_visualizer,
-                time_series_analyzer=time_series_analyzer,
-                section="all",
-            )
-            st.download_button(
-                label="Download Whole Analysis",
-                data=master_pdf_data,
-                file_name=f"{base_name}_complete_analysis_report.pdf",
-                mime="application/pdf",
-                key=f"dl_whole_{sec_id}",
-                use_container_width=True,
-                on_click=lambda: activity_log.record(user_email, "master_pdf_downloaded"),
             )
 
 # Main content area
@@ -695,453 +636,461 @@ if data_loader.get_data() is not None and st.session_state.get("analysis_given",
 
     # Tab 1: Overview
     with tab1:
-        st.markdown('<h2 class="sub-header">Data Overview</h2>', unsafe_allow_html=True)
+        if tab1.open:
+            st.markdown('<h2 class="sub-header">Data Overview</h2>', unsafe_allow_html=True)
 
-        # Get data info
-        data_info = data_loader.get_data_info()
+            # Get data info
+            data_info = data_loader.get_data_info()
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write(f"**Filename:** {data_info['filename']}")
-            st.write(f"**Rows:** {data_info['rows']}")
-            st.write(f"**Columns:** {data_info['columns']}")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write(f"**Filename:** {data_info['filename']}")
+                st.write(f"**Rows:** {data_info['rows']}")
+                st.write(f"**Columns:** {data_info['columns']}")
 
-        with col2:
-            st.write("**Memory Usage:**")
-            st.write(data_info["memory_usage"])
+            with col2:
+                st.write("**Memory Usage:**")
+                st.write(data_info["memory_usage"])
 
-            # Missing values summary
-            st.write(f"**Missing Values:** {data_info['missing_values']}")
+                # Missing values summary
+                st.write(f"**Missing Values:** {data_info['missing_values']}")
 
-        st.markdown('<h3 class="sub-header">Data Preview</h3>', unsafe_allow_html=True)
-        st.dataframe(data_loader.get_data().head(10))
+            st.markdown('<h3 class="sub-header">Data Preview</h3>', unsafe_allow_html=True)
+            st.dataframe(data_loader.get_data().head(10))
 
-        st.markdown(
-            '<h3 class="sub-header">Column Information</h3>', unsafe_allow_html=True
-        )
+            st.markdown(
+                '<h3 class="sub-header">Column Information</h3>', unsafe_allow_html=True
+            )
 
-        # Column information
-        col_info = data_loader.get_column_info()
-        st.dataframe(pd.DataFrame(col_info))
+            # Column information
+            col_info = data_loader.get_column_info()
+            st.dataframe(pd.DataFrame(col_info))
 
-        render_section_downloads("overview", "Overview")
+            render_section_downloads("overview", "Overview")
 
-    # Tab 2: Visualizations
+        # Tab 2: Visualizations
     with tab2:
-        st.markdown(
-            '<h2 class="sub-header">Data Visualizations</h2>', unsafe_allow_html=True
-        )
-
-        # Get column lists
-        numeric_cols = data_loader.get_numeric_columns()
-        categorical_cols = data_loader.get_categorical_columns()
-
-        # Distribution plots for numeric columns
-        if len(numeric_cols) > 0:
+        if tab2.open:
             st.markdown(
-                '<h3 class="sub-header">Distribution Plots</h3>', unsafe_allow_html=True
+                '<h2 class="sub-header">Data Visualizations</h2>', unsafe_allow_html=True
             )
 
-            selected_num_col = st.selectbox(
-                "Select a numeric column for distribution analysis:", numeric_cols
-            )
+            # Get column lists
+            numeric_cols = data_loader.get_numeric_columns()
+            categorical_cols = data_loader.get_categorical_columns()
 
-            col1, col2 = st.columns(2)
-
-            # Create distribution plots
-            hist_fig, box_fig = visualizer.create_distribution_plots(selected_num_col)
-
-            with col1:
-                if hist_fig:
-                    st.pyplot(hist_fig)
-
-            with col2:
-                if box_fig:
-                    st.pyplot(box_fig)
-
-            # Correlation heatmap
-            if len(numeric_cols) > 1:
+            # Distribution plots for numeric columns
+            if len(numeric_cols) > 0:
                 st.markdown(
-                    '<h3 class="sub-header">Correlation Heatmap</h3>',
-                    unsafe_allow_html=True,
+                    '<h3 class="sub-header">Distribution Plots</h3>', unsafe_allow_html=True
                 )
 
-                corr_fig = visualizer.create_correlation_heatmap()
-                if corr_fig:
-                    st.pyplot(corr_fig)
-
-        # Categorical analysis
-        if len(categorical_cols) > 0:
-            st.markdown(
-                '<h3 class="sub-header">Categorical Analysis</h3>',
-                unsafe_allow_html=True,
-            )
-
-            selected_cat_col = st.selectbox(
-                "Select a categorical column:", categorical_cols
-            )
-
-            # Create categorical plot
-            cat_fig = visualizer.create_categorical_plot(selected_cat_col)
-            if cat_fig:
-                st.pyplot(cat_fig)
-
-        # Scatter plot for numeric columns
-        if len(numeric_cols) >= 2:
-            st.markdown(
-                '<h3 class="sub-header">Scatter Plot</h3>', unsafe_allow_html=True
-            )
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                x_col = st.selectbox("Select X-axis:", numeric_cols, index=0)
-
-            with col2:
-                remaining_cols = [col for col in numeric_cols if col != x_col]
-                y_col = st.selectbox(
-                    "Select Y-axis:",
-                    remaining_cols,
-                    index=0 if len(remaining_cols) > 0 else None,
+                selected_num_col = st.selectbox(
+                    "Select a numeric column for distribution analysis:", numeric_cols
                 )
 
-            if len(remaining_cols) > 0:
-                scatter_fig = visualizer.create_scatter_plot(x_col, y_col)
-                if scatter_fig:
-                    st.pyplot(scatter_fig)
-        render_section_downloads("visualizations", "Visualizations")
+                col1, col2 = st.columns(2)
 
-    # Tab 3: Statistical Analysis
-    with tab3:
-        st.markdown(
-            '<h2 class="sub-header">Statistical Analysis</h2>', unsafe_allow_html=True
-        )
+                # Create distribution plots
+                hist_fig, box_fig = visualizer.create_distribution_plots(selected_num_col)
 
-        if len(numeric_cols) > 0:
-            # Descriptive statistics
-            st.markdown(
-                '<h3 class="sub-header">Descriptive Statistics</h3>',
-                unsafe_allow_html=True,
-            )
-            desc_stats = statistical_analyzer.get_descriptive_statistics()
-            if desc_stats is not None:
-                st.dataframe(desc_stats)
+                with col1:
+                    if hist_fig:
+                        st.pyplot(hist_fig)
 
-            # Group by analysis
+                with col2:
+                    if box_fig:
+                        st.pyplot(box_fig)
+
+                # Correlation heatmap
+                if len(numeric_cols) > 1:
+                    st.markdown(
+                        '<h3 class="sub-header">Correlation Heatmap</h3>',
+                        unsafe_allow_html=True,
+                    )
+
+                    corr_fig = visualizer.create_correlation_heatmap()
+                    if corr_fig:
+                        st.pyplot(corr_fig)
+
+            # Categorical analysis
             if len(categorical_cols) > 0:
                 st.markdown(
-                    '<h3 class="sub-header">Group By Analysis</h3>',
+                    '<h3 class="sub-header">Categorical Analysis</h3>',
                     unsafe_allow_html=True,
+                )
+
+                selected_cat_col = st.selectbox(
+                    "Select a categorical column:", categorical_cols
+                )
+
+                # Create categorical plot
+                cat_fig = visualizer.create_categorical_plot(selected_cat_col)
+                if cat_fig:
+                    st.pyplot(cat_fig)
+
+            # Scatter plot for numeric columns
+            if len(numeric_cols) >= 2:
+                st.markdown(
+                    '<h3 class="sub-header">Scatter Plot</h3>', unsafe_allow_html=True
                 )
 
                 col1, col2 = st.columns(2)
 
                 with col1:
-                    group_col = st.selectbox(
-                        "Select column to group by:", categorical_cols
-                    )
+                    x_col = st.selectbox("Select X-axis:", numeric_cols, index=0)
 
                 with col2:
-                    agg_col = st.selectbox("Select column to aggregate:", numeric_cols)
+                    remaining_cols = [col for col in numeric_cols if col != x_col]
+                    y_col = st.selectbox(
+                        "Select Y-axis:",
+                        remaining_cols,
+                        index=0 if len(remaining_cols) > 0 else None,
+                    )
 
-                agg_func = st.selectbox(
-                    "Select aggregation function:",
-                    ["Mean", "Median", "Sum", "Min", "Max", "Count", "Std Dev"],
+                if len(remaining_cols) > 0:
+                    scatter_fig = visualizer.create_scatter_plot(x_col, y_col)
+                    if scatter_fig:
+                        st.pyplot(scatter_fig)
+            render_section_downloads("visualizations", "Visualizations")
+
+        # Tab 3: Statistical Analysis
+    with tab3:
+        if tab3.open:
+            st.markdown(
+                '<h2 class="sub-header">Statistical Analysis</h2>', unsafe_allow_html=True
+            )
+
+            if len(numeric_cols) > 0:
+                # Descriptive statistics
+                st.markdown(
+                    '<h3 class="sub-header">Descriptive Statistics</h3>',
+                    unsafe_allow_html=True,
                 )
+                desc_stats = statistical_analyzer.get_descriptive_statistics()
+                if desc_stats is not None:
+                    st.dataframe(desc_stats)
 
-                # Perform group by analysis
-                grouped_data = statistical_analyzer.get_group_by_statistics(
-                    group_col, agg_col, agg_func
-                )
+                # Group by analysis
+                if len(categorical_cols) > 0:
+                    st.markdown(
+                        '<h3 class="sub-header">Group By Analysis</h3>',
+                        unsafe_allow_html=True,
+                    )
 
-                if grouped_data is not None:
-                    # Display results
-                    st.write(f"**{agg_func} of {agg_col} grouped by {group_col}:**")
-                    st.dataframe(grouped_data)
+                    col1, col2 = st.columns(2)
 
-                    # Create group by plot
-                    grouped_data, group_fig = visualizer.create_group_by_plot(
+                    with col1:
+                        group_col = st.selectbox(
+                            "Select column to group by:", categorical_cols
+                        )
+
+                    with col2:
+                        agg_col = st.selectbox("Select column to aggregate:", numeric_cols)
+
+                    agg_func = st.selectbox(
+                        "Select aggregation function:",
+                        ["Mean", "Median", "Sum", "Min", "Max", "Count", "Std Dev"],
+                    )
+
+                    # Perform group by analysis
+                    grouped_data = statistical_analyzer.get_group_by_statistics(
                         group_col, agg_col, agg_func
                     )
-                    if group_fig:
-                        st.pyplot(group_fig)
 
-            # Missing values analysis
-            st.markdown(
-                '<h3 class="sub-header">Missing Values Analysis</h3>',
-                unsafe_allow_html=True,
-            )
-            missing_summary = statistical_analyzer.get_missing_values_summary()
-            if missing_summary is not None and len(missing_summary) > 0:
-                st.dataframe(missing_summary)
-            else:
-                st.info("No missing values found in the dataset.")
+                    if grouped_data is not None:
+                        # Display results
+                        st.write(f"**{agg_func} of {agg_col} grouped by {group_col}:**")
+                        st.dataframe(grouped_data)
 
-            # Outlier analysis
-            st.markdown(
-                '<h3 class="sub-header">Outlier Analysis</h3>', unsafe_allow_html=True
-            )
+                        # Create group by plot
+                        grouped_data, group_fig = visualizer.create_group_by_plot(
+                            group_col, agg_col, agg_func
+                        )
+                        if group_fig:
+                            st.pyplot(group_fig)
 
-            outlier_method = st.radio(
-                "Select outlier detection method:", ["IQR", "Z-Score"], horizontal=True
-            )
-            method = "iqr" if outlier_method == "IQR" else "zscore"
+                # Missing values analysis
+                st.markdown(
+                    '<h3 class="sub-header">Missing Values Analysis</h3>',
+                    unsafe_allow_html=True,
+                )
+                missing_summary = statistical_analyzer.get_missing_values_summary()
+                if missing_summary is not None and len(missing_summary) > 0:
+                    st.dataframe(missing_summary)
+                else:
+                    st.info("No missing values found in the dataset.")
 
-            outlier_summary = statistical_analyzer.get_outliers_summary(method=method)
-            if outlier_summary is not None and len(outlier_summary) > 0:
-                st.dataframe(outlier_summary)
-            else:
-                st.info("No outliers found using the selected method.")
-        render_section_downloads("statistics", "Statistical Analysis")
-
-    # EDA & Data Quality: combine supplied workbench and analyzer modules.
-    with tab_eda:
-        st.markdown('<h2 class="sub-header">Exploratory Data Analysis & Quality</h2>', unsafe_allow_html=True)
-        frame = data_loader.get_data()
-        profile = data_profiler.get_dataset_profile()
-        if profile:
-            metrics = st.columns(4)
-            metrics[0].metric("Rows", f"{profile['rows']:,}")
-            metrics[1].metric("Columns", profile["columns"])
-            metrics[2].metric("Missing cells", f"{profile['missing_cells']:,}", f"{profile['missing_percentage']:.2f}%")
-            metrics[3].metric("Duplicate rows", f"{profile['duplicate_rows']:,}")
-            st.caption(f"{profile['numeric_count']} numeric · {profile['categorical_count']} categorical · {profile['datetime_count']} datetime · {profile['boolean_count']} boolean columns")
-            with st.expander("Full dataset profile"):
-                st.json(__import__("json").loads(__import__("json").dumps(profile, default=str)))
-            st.subheader("Column profile")
-            selected_profile_column = st.selectbox("Choose a column", frame.columns, key="eda_column_profile")
-            col_profile = data_profiler.get_column_profile(selected_profile_column)
-            st.json(__import__("json").loads(__import__("json").dumps(col_profile, default=str)))
-            st.dataframe(pd.DataFrame([build_column_profile(frame, selected_profile_column)]), use_container_width=True)
-            quality = data_quality_analyzer.get_quality_report() or {}
-            q1, q2 = st.columns(2)
-            q1.metric("Data health score", f"{quality.get('health_score', 0)}/100")
-            q2.metric("Quality issues", quality.get("total_issues", 0))
-            issues = quality.get("issues", [])
-            if issues:
-                st.dataframe(pd.DataFrame(issues), use_container_width=True, hide_index=True)
-            else:
-                st.success("No data quality issues detected.")
-            with st.expander("Additional quality checks"):
-                st.write("Workbench dataset profile")
-                st.json(__import__("json").loads(__import__("json").dumps(build_dataset_profile(frame), default=str)))
-                st.write("Workbench checks")
-                st.dataframe(pd.DataFrame(build_quality_report(frame)), use_container_width=True, hide_index=True)
-                st.write("Missingness analysis")
-                missing_report = data_quality_analyzer.get_missingness_analysis()
-                if missing_report and missing_report.get("missing_summary") is not None:
-                    st.dataframe(missing_report["missing_summary"], use_container_width=True, hide_index=True)
-                st.write("Duplicate analysis")
-                st.json(__import__("json").loads(__import__("json").dumps(data_quality_analyzer.get_duplicate_analysis(), default=str)))
-            st.subheader("Automated EDA report")
-            if st.button("Generate EDA report", key="generate_eda_report"):
-                report = automated_insights.generate_eda_report()
-                st.markdown(automated_insights.format_report_for_display(report))
-                st.write("Quick insights")
-                for insight in generate_insights(frame):
-                    st.write(f"• {insight}")
-                activity_log.record(user_email, "eda_report_generated", {"columns": int(frame.shape[1])})
-            st.divider()
-            st.subheader("Reversible data cleanup")
-            duplicate_count = int(frame.duplicated().sum())
-            clean_col, reset_col = st.columns(2)
-            with clean_col:
-                st.caption(f"Exact duplicate rows available to remove: {duplicate_count}")
-                if st.button("Remove exact duplicate rows", disabled=duplicate_count == 0, key="remove_duplicate_rows"):
-                    removed = data_loader.remove_duplicates()
-                    activity_log.record(user_email, "duplicate_rows_removed", {"rows_removed": int(removed)})
-                    st.success(f"Removed {removed} duplicate rows. You can restore the uploaded data with Reset data.")
-                    st.rerun()
-            with reset_col:
-                if st.button("Reset to uploaded data", key="reset_uploaded_data", disabled=not st.session_state.get("transformations")):
-                    data_loader.reset_data()
-                    activity_log.record(user_email, "data_reset_to_upload")
-        render_section_downloads("eda", "EDA & Data Quality")
-
-    # Advanced Visualizations use the supplied AdvancedVisualizer class.
-    with tab_advanced_viz:
-        st.markdown('<h2 class="sub-header">Advanced Visualizations</h2>', unsafe_allow_html=True)
-        numeric_cols = data_loader.get_numeric_columns()
-        categorical_cols = data_loader.get_categorical_columns()
-        chart = st.selectbox("Chart", ["ECDF", "Q-Q plot", "Violin plot", "Boxen plot", "Pareto chart", "Missingness heatmap", "Missingness bar chart", "Hexbin", "2D density", "Parallel coordinates", "Residual plot", "Grouped box plot", "Grouped violin plot"], key="advanced_chart")
-        fig = None
-        if chart in ("ECDF", "Q-Q plot", "Violin plot", "Boxen plot") and numeric_cols:
-            col = st.selectbox("Numeric column", numeric_cols, key="advanced_chart_numeric")
-            method = {"ECDF": advanced_visualizer.create_ecdf_plot, "Q-Q plot": advanced_visualizer.create_qq_plot, "Violin plot": advanced_visualizer.create_violin_plot, "Boxen plot": advanced_visualizer.create_boxen_plot}[chart]
-            fig = method(col)
-        elif chart == "Pareto chart" and categorical_cols:
-            fig = advanced_visualizer.create_pareto_chart(st.selectbox("Category column", categorical_cols, key="advanced_pareto_cat"))
-        elif chart == "Missingness heatmap":
-            fig = advanced_visualizer.create_missingness_heatmap()
-        elif chart == "Missingness bar chart":
-            fig = advanced_visualizer.create_missingness_bar_chart()
-        elif chart in ("Hexbin", "2D density") and len(numeric_cols) >= 2:
-            xcol, ycol = st.columns(2)
-            x = xcol.selectbox("X column", numeric_cols, key="advanced_xy_x")
-            y = ycol.selectbox("Y column", [c for c in numeric_cols if c != x], key="advanced_xy_y")
-            fig = advanced_visualizer.create_hexbin_plot(x, y) if chart == "Hexbin" else advanced_visualizer.create_density_2d_plot(x, y)
-        elif chart == "Parallel coordinates" and len(numeric_cols) >= 3:
-            cols = st.multiselect("Numeric columns (choose at least three)", numeric_cols, default=numeric_cols[:min(4, len(numeric_cols))], key="parallel_columns")
-            hue_options = ["None"] + categorical_cols
-            hue = st.selectbox("Color group", hue_options, key="parallel_hue")
-            if len(cols) >= 3:
-                fig = advanced_visualizer.create_parallel_coordinates_plot(cols, None if hue == "None" else hue)
-        elif chart == "Residual plot" and len(numeric_cols) >= 2:
-            x, y = st.columns(2)
-            xcol = x.selectbox("Predictor", numeric_cols, key="residual_x")
-            ycol = y.selectbox("Response", [c for c in numeric_cols if c != xcol], key="residual_y")
-            fig = advanced_visualizer.create_residual_plot(xcol, ycol)
-        elif chart in ("Grouped box plot", "Grouped violin plot") and numeric_cols and categorical_cols:
-            numeric = st.selectbox("Numeric value", numeric_cols, key="grouped_numeric")
-            category = st.selectbox("Group by", categorical_cols, key="grouped_category")
-            fig = advanced_visualizer.create_grouped_box_plot(numeric, category) if chart == "Grouped box plot" else advanced_visualizer.create_grouped_violin_plot(numeric, category)
-        else:
-            st.info("This chart needs more numeric or categorical columns in the uploaded CSV.")
-        if fig is not None:
-            st.pyplot(fig, use_container_width=True)
-            plt.close(fig)
-        render_section_downloads("advanced_viz", "Advanced Visualizations")
-
-    # Advanced statistical tests and pairwise analysis.
-    with tab_advanced_stats:
-        st.markdown('<h2 class="sub-header">Advanced Statistical Analysis</h2>', unsafe_allow_html=True)
-        frame = data_loader.get_data()
-        all_columns = frame.columns.tolist()
-        pair_cols = st.columns(2)
-        first = pair_cols[0].selectbox("First variable", all_columns, key="advanced_pair_first")
-        second = pair_cols[1].selectbox("Second variable", [c for c in all_columns if c != first] or all_columns, key="advanced_pair_second")
-        pair_result = pairwise_analysis(frame, first, second)
-        if "contingency" in pair_result:
-            st.dataframe(pair_result["contingency"], use_container_width=True)
-            pair_result = {k: v for k, v in pair_result.items() if k != "contingency"}
-        st.json(__import__("json").loads(__import__("json").dumps(pair_result, default=str)))
-        if len(data_loader.get_numeric_columns()) >= 2:
-            st.subheader("Correlation matrix")
-            numeric_cols = data_loader.get_numeric_columns()
-            corr_cols = st.multiselect("Columns", numeric_cols, default=numeric_cols[:min(12, len(numeric_cols))], key="advanced_corr_cols")
-            corr_method = st.selectbox("Correlation method", ["pearson", "spearman", "kendall"], key="advanced_corr_method")
-            if len(corr_cols) >= 2:
-                corr_matrix = advanced_statistical_analyzer.get_correlation_matrix(method=corr_method, columns=corr_cols)
-                st.dataframe(corr_matrix, use_container_width=True)
-                p_values = []
-                for i, left in enumerate(corr_cols):
-                    for right in corr_cols[i+1:]:
-                        result = pairwise_analysis(frame, left, right).get("correlations", {}).get(corr_method, {})
-                        p_values.append(result.get("p_value", np.nan))
-                if p_values:
-                    adjusted = benjamini_hochberg(p_values)
-                    st.caption(f"Benjamini–Hochberg adjusted p-values for {len(p_values)} tested pairs: " + ", ".join("NA" if not np.isfinite(v) else f"{v:.4g}" for v in adjusted))
-        if data_loader.get_numeric_columns():
-            st.subheader("Univariate detail")
-            selected = st.selectbox("Numeric variable", data_loader.get_numeric_columns(), key="advanced_univariate")
-        render_section_downloads("advanced_stats", "Advanced Statistics")
-
-    # Time-series tools use copy-safe analyzer and explicit profile helper.
-    with tab_time:
-        st.markdown('<h2 class="sub-header">Time-Series Analysis</h2>', unsafe_allow_html=True)
-        date_cols = time_series_analyzer.get_datetime_columns()
-        numeric_cols = data_loader.get_numeric_columns()
-        if date_cols and numeric_cols:
-            date_col = st.selectbox("Date/time column", date_cols, key="time_date_col")
-            value_col = st.selectbox("Numeric value column", numeric_cols, key="time_value_col")
-            analysis = time_series_analyzer.analyze_time_series(date_col, value_col)
-            if analysis and "error" not in analysis:
-                st.json(__import__("json").loads(__import__("json").dumps(analysis, default=str)))
-                chart_kind = st.selectbox("Time-series view", ["Trend line", "Rolling statistics", "Seasonal decomposition", "ACF/PACF", "Lag plot", "Percentage change", "Resampled values"], key="time_chart_kind")
-                fig = None
-                try:
-                    if chart_kind == "Trend line":
-                        fig = time_series_analyzer.create_time_series_plot(date_col, value_col)
-                    elif chart_kind == "Rolling statistics":
-                        max_window = max(2, min(30, int(data_loader.get_data().shape[0] // 2)))
-                        window = st.slider("Rolling window", 2, max_window, min(7, max_window), key="time_rolling_window")
-                        fig = time_series_analyzer.create_rolling_statistics_plot(date_col, value_col, window)
-                    elif chart_kind == "Seasonal decomposition":
-                        period = st.number_input("Seasonal period", min_value=2, max_value=max(2, len(data_loader.get_data()) // 2), value=min(7, max(2, len(data_loader.get_data()) // 2)), key="time_season_period")
-                        fig = time_series_analyzer.create_seasonal_decomposition_plot(date_col, value_col, period=int(period))
-                    elif chart_kind == "ACF/PACF":
-                        lags = st.slider("Lags", 1, max(1, min(40, len(data_loader.get_data()) - 1)), min(20, max(1, len(data_loader.get_data()) - 1)), key="time_lags")
-                        fig = time_series_analyzer.create_acf_pacf_plots(date_col, value_col, lags=lags)
-                    elif chart_kind == "Lag plot":
-                        lag = st.number_input("Lag", min_value=1, max_value=max(1, len(data_loader.get_data()) - 1), value=1, key="time_lag")
-                        fig = time_series_analyzer.create_lag_plot(value_col, lag=int(lag))
-                    elif chart_kind == "Percentage change":
-                        fig = time_series_analyzer.create_percentage_change_plot(date_col, value_col)
-                    else:
-                        frequency = st.selectbox("Frequency", ["D", "W", "ME", "QE", "YE"], key="time_resample_frequency")
-                        agg = st.selectbox("Aggregation", ["mean", "sum", "min", "max", "median", "count"], key="time_resample_agg")
-                        resampled = time_series_analyzer.resample_time_series(date_col, value_col, frequency, agg)
-                        if resampled is not None:
-                            st.dataframe(resampled.rename("value").to_frame(), use_container_width=True)
-                    if fig is not None:
-                        st.pyplot(fig, use_container_width=True)
-                        plt.close(fig)
-                except (ValueError, TypeError, ZeroDivisionError) as exc:
-                    st.warning(f"Could not create this time-series view: {exc}")
-                with st.expander("Time-series profile options"):
-                    duplicate_rule = st.selectbox("Duplicate timestamps", ["mean", "keep first", "keep last"], key="time_duplicate_rule")
-                    frequency = st.selectbox("Optional resampling", ["None", "D", "W", "MS", "QS", "YS"], key="time_frequency")
-                    if st.button("Build time-series profile", key="build_time_profile"):
-                        result = time_series_profile(data_loader.get_data(), date_col, value_col, duplicate_rule, None if frequency == "None" else frequency)
-                        if "data" in result:
-                            result["data"] = result["data"].to_dict()
-                        st.json(__import__("json").loads(__import__("json").dumps(result, default=str)))
-                        activity_log.record(user_email, "time_series_profile_generated", {"date_column": str(date_col), "value_column": str(value_col)})
-            elif analysis:
-                st.warning(analysis.get("error", "Could not analyze these columns."))
-        else:
-            st.info("Upload a CSV containing a date/time column and at least one numeric column to use time-series analysis.")
-        render_section_downloads("time_series", "Time Series")
-
-    # Tab 5: Gemini AI Analysis
-    with tab5:
-        st.markdown(
-            '<h2 class="sub-header">Gemini AI Analysis</h2>', unsafe_allow_html=True
-        )
-
-        if not gemini_analyzer.is_configured():
-            st.warning(
-                "Please configure your Gemini API key in the sidebar to use AI analysis."
-            )
-        else:
-            st.markdown(
-                '<div class="info-text">This section uses Google\'s Gemini AI to provide insights about your data.</div>',
-                unsafe_allow_html=True,
-            )
-
-            # Analysis options
-            analysis_type = st.selectbox(
-                "Select analysis type:", gemini_analyzer.get_analysis_types()
-            )
-
-            # Custom question for custom analysis
-            custom_question = None
-            if analysis_type == "Custom Analysis":
-                custom_question = st.text_area(
-                    "Enter your specific question about the data:",
-                    "What are the most interesting insights from this dataset and what actions would you recommend based on them?",
+                # Outlier analysis
+                st.markdown(
+                    '<h3 class="sub-header">Outlier Analysis</h3>', unsafe_allow_html=True
                 )
 
-            # Run analysis button
-            if st.button("Run AI Analysis"):
-                activity_log.record(user_email, "gemini_analysis_run", {"analysis_type": analysis_type})
-                with st.spinner("Gemini AI is analyzing your data..."):
-                    # Generate analysis
-                    response = gemini_analyzer.analyze_data(
-                        analysis_type, custom_question
+                outlier_method = st.radio(
+                    "Select outlier detection method:", ["IQR", "Z-Score"], horizontal=True
+                )
+                method = "iqr" if outlier_method == "IQR" else "zscore"
+
+                outlier_summary = statistical_analyzer.get_outliers_summary(method=method)
+                if outlier_summary is not None and len(outlier_summary) > 0:
+                    st.dataframe(outlier_summary)
+                else:
+                    st.info("No outliers found using the selected method.")
+            render_section_downloads("statistics", "Statistical Analysis")
+
+        # EDA & Data Quality: combine supplied workbench and analyzer modules.
+    with tab_eda:
+        if tab_eda.open:
+            st.markdown('<h2 class="sub-header">Exploratory Data Analysis & Quality</h2>', unsafe_allow_html=True)
+            frame = data_loader.get_data()
+            profile = data_profiler.get_dataset_profile()
+            if profile:
+                metrics = st.columns(4)
+                metrics[0].metric("Rows", f"{profile['rows']:,}")
+                metrics[1].metric("Columns", profile["columns"])
+                metrics[2].metric("Missing cells", f"{profile['missing_cells']:,}", f"{profile['missing_percentage']:.2f}%")
+                metrics[3].metric("Duplicate rows", f"{profile['duplicate_rows']:,}")
+                st.caption(f"{profile['numeric_count']} numeric · {profile['categorical_count']} categorical · {profile['datetime_count']} datetime · {profile['boolean_count']} boolean columns")
+                with st.expander("Full dataset profile"):
+                    st.json(__import__("json").loads(__import__("json").dumps(profile, default=str)))
+                st.subheader("Column profile")
+                selected_profile_column = st.selectbox("Choose a column", frame.columns, key="eda_column_profile")
+                col_profile = data_profiler.get_column_profile(selected_profile_column)
+                st.json(__import__("json").loads(__import__("json").dumps(col_profile, default=str)))
+                st.dataframe(pd.DataFrame([build_column_profile(frame, selected_profile_column)]), use_container_width=True)
+                quality = data_quality_analyzer.get_quality_report() or {}
+                q1, q2 = st.columns(2)
+                q1.metric("Data health score", f"{quality.get('health_score', 0)}/100")
+                q2.metric("Quality issues", quality.get("total_issues", 0))
+                issues = quality.get("issues", [])
+                if issues:
+                    st.dataframe(pd.DataFrame(issues), use_container_width=True, hide_index=True)
+                else:
+                    st.success("No data quality issues detected.")
+                with st.expander("Additional quality checks"):
+                    st.write("Workbench dataset profile")
+                    st.json(__import__("json").loads(__import__("json").dumps(build_dataset_profile(frame), default=str)))
+                    st.write("Workbench checks")
+                    st.dataframe(pd.DataFrame(build_quality_report(frame)), use_container_width=True, hide_index=True)
+                    st.write("Missingness analysis")
+                    missing_report = data_quality_analyzer.get_missingness_analysis()
+                    if missing_report and missing_report.get("missing_summary") is not None:
+                        st.dataframe(missing_report["missing_summary"], use_container_width=True, hide_index=True)
+                    st.write("Duplicate analysis")
+                    st.json(__import__("json").loads(__import__("json").dumps(data_quality_analyzer.get_duplicate_analysis(), default=str)))
+                st.subheader("Automated EDA report")
+                if st.button("Generate EDA report", key="generate_eda_report"):
+                    report = automated_insights.generate_eda_report()
+                    st.markdown(automated_insights.format_report_for_display(report))
+                    st.write("Quick insights")
+                    for insight in generate_insights(frame):
+                        st.write(f"• {insight}")
+                    activity_log.record(user_email, "eda_report_generated", {"columns": int(frame.shape[1])})
+                st.divider()
+                st.subheader("Reversible data cleanup")
+                duplicate_count = int(frame.duplicated().sum())
+                clean_col, reset_col = st.columns(2)
+                with clean_col:
+                    st.caption(f"Exact duplicate rows available to remove: {duplicate_count}")
+                    if st.button("Remove exact duplicate rows", disabled=duplicate_count == 0, key="remove_duplicate_rows"):
+                        removed = data_loader.remove_duplicates()
+                        activity_log.record(user_email, "duplicate_rows_removed", {"rows_removed": int(removed)})
+                        st.success(f"Removed {removed} duplicate rows. You can restore the uploaded data with Reset data.")
+                        st.rerun()
+                with reset_col:
+                    if st.button("Reset to uploaded data", key="reset_uploaded_data", disabled=not st.session_state.get("transformations")):
+                        data_loader.reset_data()
+                        activity_log.record(user_email, "data_reset_to_upload")
+            render_section_downloads("eda", "EDA & Data Quality")
+
+        # Advanced Visualizations use the supplied AdvancedVisualizer class.
+    with tab_advanced_viz:
+        if tab_advanced_viz.open:
+            st.markdown('<h2 class="sub-header">Advanced Visualizations</h2>', unsafe_allow_html=True)
+            numeric_cols = data_loader.get_numeric_columns()
+            categorical_cols = data_loader.get_categorical_columns()
+            chart = st.selectbox("Chart", ["ECDF", "Q-Q plot", "Violin plot", "Boxen plot", "Pareto chart", "Missingness heatmap", "Missingness bar chart", "Hexbin", "2D density", "Parallel coordinates", "Residual plot", "Grouped box plot", "Grouped violin plot"], key="advanced_chart")
+            fig = None
+            if chart in ("ECDF", "Q-Q plot", "Violin plot", "Boxen plot") and numeric_cols:
+                col = st.selectbox("Numeric column", numeric_cols, key="advanced_chart_numeric")
+                method = {"ECDF": advanced_visualizer.create_ecdf_plot, "Q-Q plot": advanced_visualizer.create_qq_plot, "Violin plot": advanced_visualizer.create_violin_plot, "Boxen plot": advanced_visualizer.create_boxen_plot}[chart]
+                fig = method(col)
+            elif chart == "Pareto chart" and categorical_cols:
+                fig = advanced_visualizer.create_pareto_chart(st.selectbox("Category column", categorical_cols, key="advanced_pareto_cat"))
+            elif chart == "Missingness heatmap":
+                fig = advanced_visualizer.create_missingness_heatmap()
+            elif chart == "Missingness bar chart":
+                fig = advanced_visualizer.create_missingness_bar_chart()
+            elif chart in ("Hexbin", "2D density") and len(numeric_cols) >= 2:
+                xcol, ycol = st.columns(2)
+                x = xcol.selectbox("X column", numeric_cols, key="advanced_xy_x")
+                y = ycol.selectbox("Y column", [c for c in numeric_cols if c != x], key="advanced_xy_y")
+                fig = advanced_visualizer.create_hexbin_plot(x, y) if chart == "Hexbin" else advanced_visualizer.create_density_2d_plot(x, y)
+            elif chart == "Parallel coordinates" and len(numeric_cols) >= 3:
+                cols = st.multiselect("Numeric columns (choose at least three)", numeric_cols, default=numeric_cols[:min(4, len(numeric_cols))], key="parallel_columns")
+                hue_options = ["None"] + categorical_cols
+                hue = st.selectbox("Color group", hue_options, key="parallel_hue")
+                if len(cols) >= 3:
+                    fig = advanced_visualizer.create_parallel_coordinates_plot(cols, None if hue == "None" else hue)
+            elif chart == "Residual plot" and len(numeric_cols) >= 2:
+                x, y = st.columns(2)
+                xcol = x.selectbox("Predictor", numeric_cols, key="residual_x")
+                ycol = y.selectbox("Response", [c for c in numeric_cols if c != xcol], key="residual_y")
+                fig = advanced_visualizer.create_residual_plot(xcol, ycol)
+            elif chart in ("Grouped box plot", "Grouped violin plot") and numeric_cols and categorical_cols:
+                numeric = st.selectbox("Numeric value", numeric_cols, key="grouped_numeric")
+                category = st.selectbox("Group by", categorical_cols, key="grouped_category")
+                fig = advanced_visualizer.create_grouped_box_plot(numeric, category) if chart == "Grouped box plot" else advanced_visualizer.create_grouped_violin_plot(numeric, category)
+            else:
+                st.info("This chart needs more numeric or categorical columns in the uploaded CSV.")
+            if fig is not None:
+                st.pyplot(fig, use_container_width=True)
+                plt.close(fig)
+            render_section_downloads("advanced_viz", "Advanced Visualizations")
+
+        # Advanced statistical tests and pairwise analysis.
+    with tab_advanced_stats:
+        if tab_advanced_stats.open:
+            st.markdown('<h2 class="sub-header">Advanced Statistical Analysis</h2>', unsafe_allow_html=True)
+            frame = data_loader.get_data()
+            all_columns = frame.columns.tolist()
+            pair_cols = st.columns(2)
+            first = pair_cols[0].selectbox("First variable", all_columns, key="advanced_pair_first")
+            second = pair_cols[1].selectbox("Second variable", [c for c in all_columns if c != first] or all_columns, key="advanced_pair_second")
+            pair_result = pairwise_analysis(frame, first, second)
+            if "contingency" in pair_result:
+                st.dataframe(pair_result["contingency"], use_container_width=True)
+                pair_result = {k: v for k, v in pair_result.items() if k != "contingency"}
+            st.json(__import__("json").loads(__import__("json").dumps(pair_result, default=str)))
+            if len(data_loader.get_numeric_columns()) >= 2:
+                st.subheader("Correlation matrix")
+                numeric_cols = data_loader.get_numeric_columns()
+                corr_cols = st.multiselect("Columns", numeric_cols, default=numeric_cols[:min(12, len(numeric_cols))], key="advanced_corr_cols")
+                corr_method = st.selectbox("Correlation method", ["pearson", "spearman", "kendall"], key="advanced_corr_method")
+                if len(corr_cols) >= 2:
+                    corr_matrix = advanced_statistical_analyzer.get_correlation_matrix(method=corr_method, columns=corr_cols)
+                    st.dataframe(corr_matrix, use_container_width=True)
+                    p_values = []
+                    for i, left in enumerate(corr_cols):
+                        for right in corr_cols[i+1:]:
+                            result = pairwise_analysis(frame, left, right).get("correlations", {}).get(corr_method, {})
+                            p_values.append(result.get("p_value", np.nan))
+                    if p_values:
+                        adjusted = benjamini_hochberg(p_values)
+                        st.caption(f"Benjamini–Hochberg adjusted p-values for {len(p_values)} tested pairs: " + ", ".join("NA" if not np.isfinite(v) else f"{v:.4g}" for v in adjusted))
+            if data_loader.get_numeric_columns():
+                st.subheader("Univariate detail")
+                selected = st.selectbox("Numeric variable", data_loader.get_numeric_columns(), key="advanced_univariate")
+            render_section_downloads("advanced_stats", "Advanced Statistics")
+
+        # Time-series tools use copy-safe analyzer and explicit profile helper.
+    with tab_time:
+        if tab_time.open:
+            st.markdown('<h2 class="sub-header">Time-Series Analysis</h2>', unsafe_allow_html=True)
+            date_cols = time_series_analyzer.get_datetime_columns()
+            numeric_cols = data_loader.get_numeric_columns()
+            if date_cols and numeric_cols:
+                date_col = st.selectbox("Date/time column", date_cols, key="time_date_col")
+                value_col = st.selectbox("Numeric value column", numeric_cols, key="time_value_col")
+                analysis = time_series_analyzer.analyze_time_series(date_col, value_col)
+                if analysis and "error" not in analysis:
+                    st.json(__import__("json").loads(__import__("json").dumps(analysis, default=str)))
+                    chart_kind = st.selectbox("Time-series view", ["Trend line", "Rolling statistics", "Seasonal decomposition", "ACF/PACF", "Lag plot", "Percentage change", "Resampled values"], key="time_chart_kind")
+                    fig = None
+                    try:
+                        if chart_kind == "Trend line":
+                            fig = time_series_analyzer.create_time_series_plot(date_col, value_col)
+                        elif chart_kind == "Rolling statistics":
+                            max_window = max(2, min(30, int(data_loader.get_data().shape[0] // 2)))
+                            window = st.slider("Rolling window", 2, max_window, min(7, max_window), key="time_rolling_window")
+                            fig = time_series_analyzer.create_rolling_statistics_plot(date_col, value_col, window)
+                        elif chart_kind == "Seasonal decomposition":
+                            period = st.number_input("Seasonal period", min_value=2, max_value=max(2, len(data_loader.get_data()) // 2), value=min(7, max(2, len(data_loader.get_data()) // 2)), key="time_season_period")
+                            fig = time_series_analyzer.create_seasonal_decomposition_plot(date_col, value_col, period=int(period))
+                        elif chart_kind == "ACF/PACF":
+                            lags = st.slider("Lags", 1, max(1, min(40, len(data_loader.get_data()) - 1)), min(20, max(1, len(data_loader.get_data()) - 1)), key="time_lags")
+                            fig = time_series_analyzer.create_acf_pacf_plots(date_col, value_col, lags=lags)
+                        elif chart_kind == "Lag plot":
+                            lag = st.number_input("Lag", min_value=1, max_value=max(1, len(data_loader.get_data()) - 1), value=1, key="time_lag")
+                            fig = time_series_analyzer.create_lag_plot(value_col, lag=int(lag))
+                        elif chart_kind == "Percentage change":
+                            fig = time_series_analyzer.create_percentage_change_plot(date_col, value_col)
+                        else:
+                            frequency = st.selectbox("Frequency", ["D", "W", "ME", "QE", "YE"], key="time_resample_frequency")
+                            agg = st.selectbox("Aggregation", ["mean", "sum", "min", "max", "median", "count"], key="time_resample_agg")
+                            resampled = time_series_analyzer.resample_time_series(date_col, value_col, frequency, agg)
+                            if resampled is not None:
+                                st.dataframe(resampled.rename("value").to_frame(), use_container_width=True)
+                        if fig is not None:
+                            st.pyplot(fig, use_container_width=True)
+                            plt.close(fig)
+                    except (ValueError, TypeError, ZeroDivisionError) as exc:
+                        st.warning(f"Could not create this time-series view: {exc}")
+                    with st.expander("Time-series profile options"):
+                        duplicate_rule = st.selectbox("Duplicate timestamps", ["mean", "keep first", "keep last"], key="time_duplicate_rule")
+                        frequency = st.selectbox("Optional resampling", ["None", "D", "W", "MS", "QS", "YS"], key="time_frequency")
+                        if st.button("Build time-series profile", key="build_time_profile"):
+                            result = time_series_profile(data_loader.get_data(), date_col, value_col, duplicate_rule, None if frequency == "None" else frequency)
+                            if "data" in result:
+                                result["data"] = result["data"].to_dict()
+                            st.json(__import__("json").loads(__import__("json").dumps(result, default=str)))
+                            activity_log.record(user_email, "time_series_profile_generated", {"date_column": str(date_col), "value_column": str(value_col)})
+                elif analysis:
+                    st.warning(analysis.get("error", "Could not analyze these columns."))
+            else:
+                st.info("Upload a CSV containing a date/time column and at least one numeric column to use time-series analysis.")
+            render_section_downloads("time_series", "Time Series")
+
+        # Tab 5: Gemini AI Analysis
+    with tab5:
+        if tab5.open:
+            st.markdown(
+                '<h2 class="sub-header">Gemini AI Analysis</h2>', unsafe_allow_html=True
+            )
+
+            if not gemini_analyzer.is_configured():
+                st.warning(
+                    "Please configure your Gemini API key in the sidebar to use AI analysis."
+                )
+            else:
+                st.markdown(
+                    '<div class="info-text">This section uses Google\'s Gemini AI to provide insights about your data.</div>',
+                    unsafe_allow_html=True,
+                )
+
+                # Analysis options
+                analysis_type = st.selectbox(
+                    "Select analysis type:", gemini_analyzer.get_analysis_types()
+                )
+
+                # Custom question for custom analysis
+                custom_question = None
+                if analysis_type == "Custom Analysis":
+                    custom_question = st.text_area(
+                        "Enter your specific question about the data:",
+                        "What are the most interesting insights from this dataset and what actions would you recommend based on them?",
                     )
 
-                    if response:
-                        st.session_state["_latest_gemini_response"] = response
-                        # Display response
-                        st.markdown(
-                            '<h3 class="sub-header">AI Analysis Results</h3>',
-                            unsafe_allow_html=True,
+                # Run analysis button
+                if st.button("Run AI Analysis"):
+                    activity_log.record(user_email, "gemini_analysis_run", {"analysis_type": analysis_type})
+                    with st.spinner("Gemini AI is analyzing your data..."):
+                        # Generate analysis
+                        response = gemini_analyzer.analyze_data(
+                            analysis_type, custom_question
                         )
-                        st.markdown(response)
 
-        ai_resp = st.session_state.get("_latest_gemini_response")
-        render_section_downloads("gemini", "Gemini AI Analysis")
+                        if response:
+                            st.session_state["_latest_gemini_response"] = response
+                            # Display response
+                            st.markdown(
+                                '<h3 class="sub-header">AI Analysis Results</h3>',
+                                unsafe_allow_html=True,
+                            )
+                            st.markdown(response)
+
+            ai_resp = st.session_state.get("_latest_gemini_response")
+            render_section_downloads("gemini", "Gemini AI Analysis")
 
     # Final Master Comprehensive Download Banner (Below All Tabs)
     st.markdown("---")
@@ -1153,45 +1102,55 @@ if data_loader.get_data() is not None and st.session_state.get("analysis_given",
     </div>""", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     f_col1, f_col2 = st.columns(2)
+    current_upload_signature = st.session_state.get("upload_signature")
     with f_col1:
-        final_master_pdf = generate_pdf_report(
-            data_loader=data_loader,
-            data_profiler=data_profiler,
-            data_quality_analyzer=data_quality_analyzer,
-            statistical_analyzer=statistical_analyzer,
-            gemini_analysis_text=st.session_state.get("_latest_gemini_response"),
-            automated_insights=automated_insights,
-            advanced_visualizer=advanced_visualizer,
-            time_series_analyzer=time_series_analyzer,
-            section="all",
-        )
-        st.download_button(
-            label="Download Whole Analysis (PDF)",
-            data=final_master_pdf,
-            file_name=f"{base_name}_master_analysis_report.pdf",
-            mime="application/pdf",
-            key="bottom_master_pdf",
-            use_container_width=True,
-            on_click=lambda: activity_log.record(user_email, "master_pdf_downloaded"),
-        )
+        if st.button("Prepare complete analysis PDF", key="prepare_master_pdf"):
+            with st.spinner("Preparing the complete PDF report..."):
+                pdf_bytes = generate_pdf_report(
+                    data_loader=data_loader,
+                    data_profiler=data_profiler,
+                    data_quality_analyzer=data_quality_analyzer,
+                    statistical_analyzer=statistical_analyzer,
+                    gemini_analysis_text=st.session_state.get("_latest_gemini_response"),
+                    automated_insights=automated_insights,
+                    advanced_visualizer=advanced_visualizer,
+                    time_series_analyzer=time_series_analyzer,
+                    section="all",
+                )
+            st.session_state["_prepared_master_pdf"] = (current_upload_signature, pdf_bytes)
+        prepared_pdf = st.session_state.get("_prepared_master_pdf")
+        if prepared_pdf and prepared_pdf[0] == current_upload_signature:
+            st.download_button(
+                label="Download Whole Analysis (PDF)",
+                data=prepared_pdf[1],
+                file_name=f"{base_name}_master_analysis_report.pdf",
+                mime="application/pdf",
+                key="bottom_master_pdf",
+                use_container_width=True,
+                on_click=lambda: activity_log.record(user_email, "master_pdf_downloaded"),
+            )
     with f_col2:
-        final_archive_zip = generate_full_archive_zip(
-            data_loader=data_loader,
-            data_profiler=data_profiler,
-            data_quality_analyzer=data_quality_analyzer,
-            statistical_analyzer=statistical_analyzer,
-            gemini_analysis_text=st.session_state.get("_latest_gemini_response"),
-            automated_insights=automated_insights,
-            advanced_visualizer=advanced_visualizer,
-            time_series_analyzer=time_series_analyzer,
-        )
-        st.download_button(
-            label="Download Complete Archive (ZIP)",
-            data=final_archive_zip,
-            file_name=f"{base_name}_complete_analysis_archive.zip",
-            mime="application/zip",
-            key="bottom_master_zip",
-            use_container_width=True,
-            on_click=lambda: activity_log.record(user_email, "archive_zip_downloaded"),
-        )
-
+        if st.button("Prepare complete analysis ZIP", key="prepare_master_zip"):
+            with st.spinner("Preparing the complete ZIP archive..."):
+                zip_bytes = generate_full_archive_zip(
+                    data_loader=data_loader,
+                    data_profiler=data_profiler,
+                    data_quality_analyzer=data_quality_analyzer,
+                    statistical_analyzer=statistical_analyzer,
+                    gemini_analysis_text=st.session_state.get("_latest_gemini_response"),
+                    automated_insights=automated_insights,
+                    advanced_visualizer=advanced_visualizer,
+                    time_series_analyzer=time_series_analyzer,
+                )
+            st.session_state["_prepared_master_zip"] = (current_upload_signature, zip_bytes)
+        prepared_zip = st.session_state.get("_prepared_master_zip")
+        if prepared_zip and prepared_zip[0] == current_upload_signature:
+            st.download_button(
+                label="Download Complete Archive (ZIP)",
+                data=prepared_zip[1],
+                file_name=f"{base_name}_complete_analysis_archive.zip",
+                mime="application/zip",
+                key="bottom_master_zip",
+                use_container_width=True,
+                on_click=lambda: activity_log.record(user_email, "archive_zip_downloaded"),
+            )

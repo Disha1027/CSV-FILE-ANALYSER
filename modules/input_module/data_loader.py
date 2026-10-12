@@ -52,19 +52,25 @@ class DataLoader:
                 return False
 
             try:
-                content_bytes = uploaded_file.getvalue() if hasattr(uploaded_file, "getvalue") else uploaded_file.read()
+                file_id = getattr(uploaded_file, "file_id", None)
+                file_size = getattr(uploaded_file, "size", None)
+                if file_id is not None:
+                    signature = f"{file_id}:{filename}:{file_size}"
+                    if signature == st.session_state.upload_signature and st.session_state.data is not None:
+                        return True
+                    content_bytes = uploaded_file.getvalue() if hasattr(uploaded_file, "getvalue") else uploaded_file.read()
+                else:
+                    content_bytes = uploaded_file.getvalue() if hasattr(uploaded_file, "getvalue") else uploaded_file.read()
+                    signature = hashlib.sha256(content_bytes).hexdigest()
+                    if signature == st.session_state.upload_signature and st.session_state.data is not None:
+                        return True
+
                 if content_bytes[:5].startswith(b"%PDF"):
                     st.error("Please upload .CSV files only")
                     return False
 
-                signature = hashlib.sha256(content_bytes).hexdigest()
-                if signature == st.session_state.upload_signature and st.session_state.data is not None:
-                    return True
-                
-                if hasattr(uploaded_file, "seek"):
-                    uploaded_file.seek(0)
-                # Read the CSV file
-                df = pd.read_csv(uploaded_file)
+                # Parse the upload once; future reruns return above using its stable upload id.
+                df = pd.read_csv(io.BytesIO(content_bytes))
                 if df.empty or df.shape[1] == 0:
                     raise ValueError("The CSV contains no data rows to analyze.")
                 st.session_state.data = df
