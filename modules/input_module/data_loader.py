@@ -32,7 +32,7 @@ class DataLoader:
         Returns:
             uploaded_file: The uploaded file object or None
         """
-        uploaded_file = st.file_uploader("Upload your CSV file", type=['csv'])
+        uploaded_file = st.file_uploader("Upload your CSV file", type=None, help="Please upload .CSV files only")
         return uploaded_file
     
     def load_data(self, uploaded_file):
@@ -46,10 +46,23 @@ class DataLoader:
             bool: True if loading was successful, False otherwise
         """
         if uploaded_file is not None:
+            filename = getattr(uploaded_file, "name", "")
+            if not filename.lower().endswith(".csv"):
+                st.error("Please upload .CSV files only")
+                return False
+
             try:
-                signature = hashlib.sha256(uploaded_file.getvalue()).hexdigest()
+                content_bytes = uploaded_file.getvalue() if hasattr(uploaded_file, "getvalue") else uploaded_file.read()
+                if content_bytes[:5].startswith(b"%PDF"):
+                    st.error("Please upload .CSV files only")
+                    return False
+
+                signature = hashlib.sha256(content_bytes).hexdigest()
                 if signature == st.session_state.upload_signature and st.session_state.data is not None:
                     return True
+                
+                if hasattr(uploaded_file, "seek"):
+                    uploaded_file.seek(0)
                 # Read the CSV file
                 df = pd.read_csv(uploaded_file)
                 if df.empty or df.shape[1] == 0:
@@ -63,8 +76,8 @@ class DataLoader:
                 st.session_state.filename = uploaded_file.name
                 st.session_state.file_size_bytes = getattr(uploaded_file, "size", None)
                 return True
-            except Exception as e:
-                st.error(f"Error: {e}")
+            except Exception:
+                st.error("Please upload .CSV files only")
                 return False
         return False
     

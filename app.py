@@ -16,22 +16,347 @@ from modules.data_analysis_module import (
 )
 from modules.processing_module import GeminiAnalyzer
 from modules.activity_log import ActivityLog
+from modules.reporting_module import generate_pdf_report, generate_full_archive_zip, generate_section_archive_zip
 
 # Set page configuration
 st.set_page_config(
     page_title="CSV Data Analyzer",
-    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 st.markdown('''<style>
-.stApp{background:#f4f7ff}
+/* Base application theme */
+.stApp {
+    background: #f4f7ff !important;
+    color: #1e293b !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Header bar */
+header[data-testid="stHeader"] {
+    background: #f4f7ff !important;
+}
+header[data-testid="stHeader"] svg,
+header[data-testid="stHeader"] button {
+    color: #17283d !important;
+    fill: #17283d !important;
+}
+
+/* Headings */
+.main-header,
+h1.main-header,
+.stApp h1,
+div[data-testid="stMarkdownContainer"] > h1 {
+    color: #17283d !important;
+    font-weight: 850 !important;
+    font-size: 2.4rem !important;
+    letter-spacing: -0.02em !important;
+    margin-bottom: 0.8rem !important;
+}
+
+.sub-header,
+h2.sub-header,
+h3.sub-header,
+.stApp h2,
+.stApp h3,
+.stApp h4,
+div[data-testid="stMarkdownContainer"] > h2,
+div[data-testid="stMarkdownContainer"] > h3,
+div[data-testid="stMarkdownContainer"] > h4 {
+    color: #17283d !important;
+    font-weight: 750 !important;
+    margin-top: 1.2rem !important;
+    margin-bottom: 0.6rem !important;
+}
+
+/* Text and markdown */
+.stApp p,
+.stApp span,
+.stApp li,
+div[data-testid="stMarkdownContainer"] p,
+div[data-testid="stMarkdownContainer"] span,
+div[data-testid="stMarkdownContainer"] li {
+    color: #1e293b !important;
+    line-height: 1.6;
+}
+
+.stApp strong,
+.stApp b,
+div[data-testid="stMarkdownContainer"] strong,
+div[data-testid="stMarkdownContainer"] b {
+    color: #0f172a !important;
+    font-weight: 700 !important;
+}
+
+/* Captions */
+.stApp small,
+div[data-testid="stCaptionContainer"],
+div[data-testid="stCaptionContainer"] p,
+div[data-testid="stCaptionContainer"] span,
+.stCaption {
+    color: #475569 !important;
+    font-size: 0.85rem !important;
+}
+
+/* Sidebar styling */
+[data-testid="stSidebar"] {
+    background: #ffffff !important;
+    border-right: 1px solid #e7e8f2 !important;
+}
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] span,
+[data-testid="stSidebar"] div[data-testid="stMarkdownContainer"] p {
+    color: #1e293b !important;
+}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p,
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] span,
+[data-testid="stSidebar"] small {
+    color: #475569 !important;
+}
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 {
+    color: #17283d !important;
+    font-weight: 800 !important;
+}
+[data-testid="stSidebar"] hr {
+    border-color: #e2e8f0 !important;
+}
+
+/* Sidebar expander */
+[data-testid="stSidebar"] [data-testid="stExpander"] {
+    background: #f8fafd !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 12px !important;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] details summary,
+[data-testid="stSidebar"] [data-testid="stExpander"] details summary p,
+[data-testid="stSidebar"] [data-testid="stExpander"] summary span {
+    color: #1e293b !important;
+    font-weight: 600 !important;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary:hover p {
+    color: #6657d5 !important;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary svg {
+    fill: #475569 !important;
+}
+
+/* Widget labels across entire app */
+[data-testid="stWidgetLabel"] label,
+[data-testid="stWidgetLabel"] p,
+label[data-testid="stWidgetLabel"],
+.stApp label {
+    color: #1e293b !important;
+    font-weight: 600 !important;
+}
+
+/* Tabs */
+button[data-baseweb="tab"] {
+    color: #475569 !important;
+    font-weight: 600 !important;
+    background: transparent !important;
+    border-radius: 8px 8px 0 0 !important;
+    padding: 10px 18px !important;
+    transition: color 0.15s ease, background-color 0.15s ease !important;
+}
+button[data-baseweb="tab"] p,
+button[data-baseweb="tab"] div,
+button[data-baseweb="tab"] span {
+    color: #475569 !important;
+    font-weight: 600 !important;
+}
+button[data-baseweb="tab"]:hover {
+    color: #17283d !important;
+    background: rgba(102, 87, 213, 0.06) !important;
+}
+button[data-baseweb="tab"]:hover p,
+button[data-baseweb="tab"]:hover span {
+    color: #17283d !important;
+}
+button[data-baseweb="tab"][aria-selected="true"] {
+    color: #6657d5 !important;
+    font-weight: 750 !important;
+}
+button[data-baseweb="tab"][aria-selected="true"] p,
+button[data-baseweb="tab"][aria-selected="true"] span {
+    color: #6657d5 !important;
+    font-weight: 750 !important;
+}
+div[data-baseweb="tab-highlight"] {
+    background-color: #6657d5 !important;
+    height: 3px !important;
+    border-radius: 3px 3px 0 0 !important;
+}
+div[data-baseweb="tab-border"] {
+    background-color: #e2e8f0 !important;
+}
+
+/* File uploader */
+[data-testid="stFileUploader"] section {
+    background: #f8fafd !important;
+    border: 1.5px dashed #cbd5e1 !important;
+    border-radius: 14px !important;
+    padding: 1rem !important;
+}
+[data-testid="stFileUploader"] section:hover {
+    border-color: #6657d5 !important;
+    background: #f4f1ff !important;
+}
+[data-testid="stFileUploader"] section [data-testid="stMarkdownContainer"] p,
+[data-testid="stFileUploader"] section span,
+[data-testid="stFileUploader"] section small {
+    color: #475569 !important;
+}
+[data-testid="stFileUploader"] button {
+    background: #ffffff !important;
+    color: #1e293b !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 10px !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
+}
+[data-testid="stFileUploader"] button:hover {
+    background: #f1f5f9 !important;
+    border-color: #94a3b8 !important;
+    color: #0f172a !important;
+}
+[data-testid="stFileUploader"] [data-testid="stUploadedFile"] {
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 12px !important;
+}
+[data-testid="stFileUploader"] [data-testid="stUploadedFile"] span,
+[data-testid="stFileUploader"] [data-testid="stUploadedFile"] div {
+    color: #1e293b !important;
+}
+[data-testid="stFileUploader"] [data-testid="stUploadedFile"] small {
+    color: #64748b !important;
+}
+
+/* Text Inputs, Text Areas, Number Inputs */
+[data-testid="stTextInput"] input,
+[data-testid="stTextArea"] textarea,
+[data-testid="stNumberInput"] input {
+    background: #ffffff !important;
+    color: #1e293b !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 10px !important;
+}
+[data-testid="stTextInput"] input:focus,
+[data-testid="stTextArea"] textarea:focus,
+[data-testid="stNumberInput"] input:focus {
+    border-color: #6657d5 !important;
+    box-shadow: 0 0 0 1px #6657d5 !important;
+}
+
+/* Selectbox, Multiselect dropdowns */
+div[data-baseweb="select"] > div {
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    border-radius: 10px !important;
+    color: #1e293b !important;
+}
+div[data-baseweb="select"] span {
+    color: #1e293b !important;
+}
+div[data-baseweb="popover"] {
+    background: #ffffff !important;
+    color: #1e293b !important;
+}
+div[data-baseweb="menu"] li {
+    color: #1e293b !important;
+}
+div[data-baseweb="menu"] li:hover {
+    background: #f4f1ff !important;
+}
+
+/* Radio buttons & checkboxes */
+div[data-testid="stRadio"] label,
+div[data-testid="stRadio"] p,
+div[data-testid="stRadio"] span,
+div[data-testid="stCheckbox"] label,
+div[data-testid="stCheckbox"] p,
+div[data-testid="stCheckbox"] span {
+    color: #1e293b !important;
+}
+
+/* Metric cards */
+div[data-testid="stMetric"] {
+    background: #ffffff !important;
+    border: 1px solid #e8e7f4 !important;
+    border-radius: 14px !important;
+    padding: 14px 18px !important;
+    box-shadow: 0 4px 12px rgba(102, 87, 213, 0.05) !important;
+}
+div[data-testid="stMetricLabel"] p,
+div[data-testid="stMetricLabel"] label,
+div[data-testid="stMetricLabel"] span {
+    color: #64748b !important;
+    font-weight: 600 !important;
+    font-size: 0.85rem !important;
+}
+div[data-testid="stMetricValue"] div,
+div[data-testid="stMetricValue"] {
+    color: #17283d !important;
+    font-weight: 800 !important;
+}
+
+/* Expanders in main area */
+[data-testid="stExpander"] {
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 14px !important;
+}
+[data-testid="stExpander"] details summary,
+[data-testid="stExpander"] details summary p,
+[data-testid="stExpander"] summary span {
+    color: #1e293b !important;
+    font-weight: 600 !important;
+}
+[data-testid="stExpander"] summary svg {
+    fill: #475569 !important;
+}
+
+/* Dataframe containers */
+div[data-testid="stDataFrame"] {
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    border: 1px solid #e2e8f0 !important;
+    background: #ffffff !important;
+}
+
+/* JSON display */
+div[data-testid="stJson"] {
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 12px !important;
+    padding: 12px !important;
+}
+
+/* Info, Success, Alert boxes */
+.info-text {
+    background-color: #eef2ff !important;
+    color: #312e81 !important;
+    padding: 1rem !important;
+    border-radius: 0.75rem !important;
+    border: 1px solid #e0e7ff !important;
+    margin-bottom: 1rem !important;
+}
+div[data-testid="stAlert"] {
+    border-radius: 12px !important;
+}
+div[data-testid="stAlert"] [data-testid="stMarkdownContainer"] p {
+    color: inherit !important;
+}
+
+/* Login styling */
 .login-left{min-height:78vh;padding:42px 7%;border-radius:26px 0 0 26px;background:linear-gradient(135deg,#a9eee4,#70d0cd);color:#286f78}
 .login-right{min-height:0;padding:52px 9% 12px;border-radius:0 26px 0 0;background:#fbfefe}
 div[data-testid=stHorizontalBlock]>div[data-testid=column]:nth-child(2){background:#fbfefe;border-radius:0 26px 26px 0}
-div[data-testid=stButton] button{background:#55bdb4!important;color:white!important;border:0!important;border-radius:14px;padding:.8rem 1.2rem;box-shadow:0 8px 20px #55bdb433}
-div[data-testid=stButton] button:hover{background:#43aaa2!important;color:white!important}
+div[data-testid=stButton] button, div[data-testid=stDownloadButton] button{background:#55bdb4!important;color:white!important;border:0!important;border-radius:14px;padding:.8rem 1.2rem;box-shadow:0 8px 20px #55bdb433}
+div[data-testid=stButton] button:hover, div[data-testid=stDownloadButton] button:hover{background:#43aaa2!important;color:white!important}
 .login-brand{font-size:1.1rem;font-weight:850;letter-spacing:.04em}
 .login-chart{height:185px;margin:26px auto;padding:18px;border:1px solid #ffffffbd;border-radius:22px;background:#ffffff66;display:flex;align-items:end;justify-content:space-around}
 .login-chart i{display:block;width:13%;border-radius:7px 7px 0 0;background:#f4c1a8}
@@ -42,9 +367,8 @@ div[data-testid=stButton] button:hover{background:#43aaa2!important;color:white!
 .login-details{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:24px;color:#347e87;font-size:.92rem;line-height:1.55}.login-details ol{padding-left:1.3rem;margin:.45rem 0}.login-details li{padding:.12rem 0}.login-details p{margin:.35rem 0 .8rem}.login-description{margin:0 0 18px}.login-copyright{display:block;margin-top:18px;color:#347e87}
 .login-right h1{font-size:2.7rem;color:#315b60;font-weight:850;margin-top:3rem}
 .login-right p{font-size:1.1rem;color:#80999d;line-height:1.8;margin:1.5rem 0}
-[data-testid="stSidebar"]{background:#fff;border-right:1px solid #e7e8f2}
-.main-header{color:#17283d;font-weight:850}
-.sub-header{color:#23384d}
+
+/* Hero Section */
 .studio-hero{padding:38px;border:1px solid #e8e7f4;border-radius:24px;background:linear-gradient(115deg,#fff 15%,#f4f1ff);box-shadow:0 12px 40px #49408212}
 .studio-kicker{color:#7267ce;font-size:.72rem;font-weight:850;letter-spacing:.22em}
 .studio-title{color:#6657d5;font-size:3rem;line-height:1.05;font-weight:900;margin:26px 0 18px}
@@ -70,7 +394,7 @@ if not auth_config:
 if not st.user.is_logged_in:
     left,right=st.columns([1.35,.9],gap="small")
     with left:
-        st.markdown('''<div class="login-left"><div class="login-brand">▥ &nbsp; CSV FILE ANALYSER</div><div class="login-chart"><i></i><i></i><i></i><i></i><i></i><i></i></div><h1>CSV FILE ANALYSER</h1><p class='login-description'>In fulfilment of the requirements for the course IT303 Software Engineering.</p><div class='login-details'><div><b>Team members</b><ol><li>Apurv Rohom</li><li>Disha A</li><li>Pranathi Udaya Kumar</li></ol></div><div><b>Under the guidance of</b><p>Prof. Jaidh ar C D</p><b>Course</b><p>IT303 Software Engineering</p></div></div><small class='login-copyright'>Copyright © 2026 CSV File Analyser</small></div>''',unsafe_allow_html=True)
+        st.markdown('''<div class="login-left"><div class="login-brand">CSV FILE ANALYSER</div><div class="login-chart"><i></i><i></i><i></i><i></i><i></i><i></i></div><h1>CSV FILE ANALYSER</h1><p class='login-description'>In fulfilment of the requirements for the course IT303 Software Engineering.</p><div class='login-details'><div><b>Team members</b><ol><li>Apurv Rohom</li><li>Disha A</li><li>Pranathi Udaya Kumar</li></ol></div><div><b>Under the guidance of</b><p>Prof. Jaidhar C D</p><b>Course</b><p>IT303 Software Engineering</p></div></div><small class='login-copyright'>Copyright © 2026 CSV File Analyser</small></div>''',unsafe_allow_html=True)
     with right:
         st.markdown('''<div class="login-right"><small style="color:#58aaa9;letter-spacing:.2em;font-weight:bold">CSV DATA ANALYSER</small><h1>Welcome back</h1><p>Continue to your workspace and start exploring your data.</p></div>''',unsafe_allow_html=True)
         st.button("Sign in",on_click=begin_google_signin,type="primary")
@@ -103,33 +427,6 @@ def sign_out_and_record():
     st.session_state.pop("_activity_logged_user", None)
     st.session_state.pop("_activity_previous_login", None)
     st.logout()
-
-# Add custom CSS
-st.markdown(
-    """
-<style>
-    .main-header {
-        font-size: 2.5rem;
-        color: #4CAF50;
-        text-align: center;
-        margin-bottom: 1rem;
-    }
-    .sub-header {
-        font-size: 1.5rem;
-        color: #2196F3;
-        margin-top: 2rem;
-        margin-bottom: 1rem;
-    }
-    .info-text {
-        background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin-bottom: 1rem;
-    }
-</style>
-""",
-    unsafe_allow_html=True,
-)
 
 # Initialize modules
 data_loader = DataLoader()
@@ -188,23 +485,48 @@ with st.sidebar:
     uploaded_file = data_loader.create_upload_widget()
 
     if uploaded_file is not None:
-        success = data_loader.load_data(uploaded_file)
-        if success:
-            st.success(f"Successfully loaded: {data_loader.get_filename()}")
-            upload_event_id = str(getattr(uploaded_file, "file_id", "") or f"{uploaded_file.name}:{uploaded_file.size}")
-            if st.session_state.get("_activity_last_upload") != upload_event_id:
-                frame = data_loader.get_data()
-                activity_log.record(
-                    user_email,
-                    "csv_uploaded",
-                    {"rows": int(frame.shape[0]), "columns": int(frame.shape[1]), "size_bytes": int(uploaded_file.size)},
-                )
-                st.session_state["_activity_last_upload"] = upload_event_id
+        if not str(uploaded_file.name).lower().endswith(".csv"):
+            st.error("Please upload .CSV files only")
+            if data_loader.get_data() is not None:
+                data_loader.reset_data()
+            st.session_state["analysis_given"] = False
         else:
             upload_event_id = str(getattr(uploaded_file, "file_id", "") or f"{uploaded_file.name}:{uploaded_file.size}")
-            if st.session_state.get("_activity_last_failed_upload") != upload_event_id:
-                activity_log.record(user_email, "csv_upload_failed")
-                st.session_state["_activity_last_failed_upload"] = upload_event_id
+            if st.session_state.get("_active_file_id") != upload_event_id:
+                st.session_state["_active_file_id"] = upload_event_id
+                st.session_state["analysis_given"] = False
+
+            success = data_loader.load_data(uploaded_file)
+            if success:
+                st.success(f"Successfully loaded: {data_loader.get_filename()}")
+                if not st.session_state.get("analysis_given", False):
+                    st.caption("Click the Analyse button below to view analysis.")
+                else:
+                    st.caption("Analysis active for this dataset")
+
+                if st.session_state.get("_activity_last_upload") != upload_event_id:
+                    frame = data_loader.get_data()
+                    activity_log.record(
+                        user_email,
+                        "csv_uploaded",
+                        {"rows": int(frame.shape[0]), "columns": int(frame.shape[1]), "size_bytes": int(uploaded_file.size)},
+                    )
+                    st.session_state["_activity_last_upload"] = upload_event_id
+            else:
+                upload_event_id = str(getattr(uploaded_file, "file_id", "") or f"{uploaded_file.name}:{uploaded_file.size}")
+                if st.session_state.get("_activity_last_failed_upload") != upload_event_id:
+                    activity_log.record(user_email, "csv_upload_failed")
+                    st.session_state["_activity_last_failed_upload"] = upload_event_id
+
+    # Analyse button directly in the sidebar
+    analyse_btn = st.button("Analyse", type="primary", key="sidebar_analyse_btn", use_container_width=True)
+    if analyse_btn:
+        if uploaded_file is None or data_loader.get_data() is None:
+            st.error("Please add a .csv file")
+        else:
+            st.session_state["analysis_given"] = True
+            activity_log.record(user_email, "analysis_started", {"filename": data_loader.get_filename()})
+            st.rerun()
 
     # Gemini API key input
     st.markdown("---")
@@ -214,23 +536,154 @@ with st.sidebar:
         activity_log.record(user_email, "gemini_api_key_configured")
         st.session_state["_activity_gemini_key_logged"] = True
 
+    # Final Download in Sidebar (available once analysis is active)
+    if data_loader.get_data() is not None and st.session_state.get("analysis_given", False):
+        st.markdown("---")
+        st.subheader("Final Download (All Sections)")
+        st.caption("Comprehensive export covering all 8 sections:")
+        processed_name = (data_loader.get_filename() or "data.csv").rsplit(".", 1)[0]
+        sb_col1, sb_col2 = st.columns(2)
+        with sb_col1:
+            master_pdf_bytes = generate_pdf_report(
+                data_loader=data_loader,
+                data_profiler=data_profiler,
+                data_quality_analyzer=data_quality_analyzer,
+                statistical_analyzer=statistical_analyzer,
+                gemini_analysis_text=st.session_state.get("_latest_gemini_response"),
+                automated_insights=automated_insights,
+                advanced_visualizer=advanced_visualizer,
+                time_series_analyzer=time_series_analyzer,
+                section="all",
+            )
+            st.download_button(
+                label="Master PDF Report",
+                data=master_pdf_bytes,
+                file_name=f"{processed_name}_master_analysis_report.pdf",
+                mime="application/pdf",
+                key="sidebar_master_pdf",
+                on_click=lambda: activity_log.record(user_email, "master_pdf_downloaded"),
+                use_container_width=True,
+            )
+        with sb_col2:
+            archive_zip_bytes = generate_full_archive_zip(
+                data_loader=data_loader,
+                data_profiler=data_profiler,
+                data_quality_analyzer=data_quality_analyzer,
+                statistical_analyzer=statistical_analyzer,
+                gemini_analysis_text=st.session_state.get("_latest_gemini_response"),
+                automated_insights=automated_insights,
+                advanced_visualizer=advanced_visualizer,
+                time_series_analyzer=time_series_analyzer,
+            )
+            st.download_button(
+                label="Complete Archive (ZIP)",
+                data=archive_zip_bytes,
+                file_name=f"{processed_name}_complete_analysis_archive.zip",
+                mime="application/zip",
+                key="sidebar_all_zip",
+                on_click=lambda: activity_log.record(user_email, "archive_zip_downloaded"),
+                use_container_width=True,
+            )
+
 if data_loader.get_data() is None:
-    st.markdown('<p style="color:#7267ce;letter-spacing:.2em;font-size:.75rem;font-weight:bold">YOUR DATA WORKSPACE</p><h1 class="main-header">CSV Data Studio</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">CSV File Analyser</h1>', unsafe_allow_html=True)
+    st.markdown("""<div class="studio-hero"><div class="studio-kicker">YOUR DATA WORKSPACE</div><div class="studio-title">Make sense of<br>your data.</div><div class="studio-copy">Turn a CSV into clear answers. Explore patterns, check data quality, and uncover insights in one place.</div><div class="studio-grid"><div class="studio-card">Quick overview<small>Know what is in your data</small></div><div class="studio-card">Visual patterns<small>See trends at a glance</small></div><div class="studio-card">Deeper analysis<small>Statistics and data quality</small></div><div class="studio-card">AI assistance<small>Ask better questions</small></div></div></div>""",unsafe_allow_html=True)
+    st.info("Please add a .csv file in the sidebar to begin analysis.")
+
+elif not st.session_state.get("analysis_given", False):
+    st.markdown('<h1 class="main-header">CSV File Analyser</h1>', unsafe_allow_html=True)
+    d_info = data_loader.get_data_info()
+    st.markdown(f"""<div class="studio-hero">
+        <div class="studio-kicker">CSV FILE READY</div>
+        <div class="studio-title">Ready to analyze<br>{data_loader.get_filename()}</div>
+        <div class="studio-copy">Dataset contains <b>{d_info['rows']:,} rows</b> and <b>{d_info['columns']} columns</b>. Click the <b>Analyse</b> button in the sidebar or below to view results.</div>
+    </div>""", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    st.subheader("Dataset Preview (First 5 Rows)")
+    st.dataframe(data_loader.get_data().head(5), use_container_width=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    col_btn, _ = st.columns([1.5, 2.5])
+    with col_btn:
+        if st.button("Analyse", type="primary", key="main_analyse_button", use_container_width=True):
+            st.session_state["analysis_given"] = True
+            activity_log.record(user_email, "analysis_started", {"filename": data_loader.get_filename()})
+            st.rerun()
+
 else:
-    st.markdown('<p style="color:#7267ce;letter-spacing:.2em;font-size:.75rem;font-weight:bold">YOUR DATA WORKSPACE</p><h1 class="main-header">CSV File Analyser</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">CSV File Analyser</h1>', unsafe_allow_html=True)
+    h_col1, h_col2 = st.columns([3, 1])
+    with h_col1:
+        st.success(f"Analysis active for **{data_loader.get_filename()}** ({data_loader.get_data().shape[0]:,} rows, {data_loader.get_data().shape[1]} columns)")
+    with h_col2:
+        if st.button("Re-analyse / Reset", key="reanalyse_btn", use_container_width=True):
+            st.session_state["analysis_given"] = False
+            st.rerun()
+
+    def render_section_downloads(sec_id, sec_title, *args, **kwargs):
+        st.markdown("---")
+        st.markdown(f'<h4 class="sub-header">Downloads for {sec_title}</h4>', unsafe_allow_html=True)
+        base_name = (data_loader.get_filename() or "data.csv").rsplit(".", 1)[0]
+
+        col_sec, col_whole = st.columns(2)
+
+        with col_sec:
+            pdf_data = generate_pdf_report(
+                data_loader=data_loader,
+                data_profiler=data_profiler,
+                data_quality_analyzer=data_quality_analyzer,
+                statistical_analyzer=statistical_analyzer,
+                gemini_analysis_text=st.session_state.get("_latest_gemini_response"),
+                automated_insights=automated_insights,
+                advanced_visualizer=advanced_visualizer,
+                time_series_analyzer=time_series_analyzer,
+                section=sec_id,
+            )
+            st.download_button(
+                label=f"Download {sec_title} Analysis",
+                data=pdf_data,
+                file_name=f"{base_name}_{sec_id}_analysis.pdf",
+                mime="application/pdf",
+                key=f"dl_sec_{sec_id}",
+                use_container_width=True,
+                on_click=lambda: activity_log.record(user_email, f"section_pdf_downloaded_{sec_id}"),
+            )
+
+        with col_whole:
+            master_pdf_data = generate_pdf_report(
+                data_loader=data_loader,
+                data_profiler=data_profiler,
+                data_quality_analyzer=data_quality_analyzer,
+                statistical_analyzer=statistical_analyzer,
+                gemini_analysis_text=st.session_state.get("_latest_gemini_response"),
+                automated_insights=automated_insights,
+                advanced_visualizer=advanced_visualizer,
+                time_series_analyzer=time_series_analyzer,
+                section="all",
+            )
+            st.download_button(
+                label="Download Whole Analysis",
+                data=master_pdf_data,
+                file_name=f"{base_name}_complete_analysis_report.pdf",
+                mime="application/pdf",
+                key=f"dl_whole_{sec_id}",
+                use_container_width=True,
+                on_click=lambda: activity_log.record(user_email, "master_pdf_downloaded"),
+            )
 
 # Main content area
-if data_loader.get_data() is not None:
+if data_loader.get_data() is not None and st.session_state.get("analysis_given", False):
     # Display tabs for different analysis options
     analysis_tab_labels = [
-        "📊 Overview",
-        "🔎 EDA & Data Quality",
-        "📈 Visualizations",
-        "✨ Advanced Visualizations",
-        "🧮 Statistical Analysis",
-        "📐 Advanced Statistics",
-        "🕒 Time Series",
-        "🧠 Gemini AI Analysis",
+        "Overview",
+        "EDA & Data Quality",
+        "Visualizations",
+        "Advanced Visualizations",
+        "Statistical Analysis",
+        "Advanced Statistics",
+        "Time Series",
+        "Gemini AI Analysis",
     ]
     tab1, tab_eda, tab2, tab_advanced_viz, tab3, tab_advanced_stats, tab_time, tab5 = st.tabs(
         analysis_tab_labels, key="analysis_tabs", on_change="rerun"
@@ -271,21 +724,7 @@ if data_loader.get_data() is not None:
         col_info = data_loader.get_column_info()
         st.dataframe(pd.DataFrame(col_info))
 
-        # Download processed data
-        st.markdown(
-            '<h3 class="sub-header">Download Processed Data</h3>',
-            unsafe_allow_html=True,
-        )
-        processed_data = data_loader.get_data()
-        if processed_data is not None:
-            processed_name = (data_loader.get_filename() or "data.csv").rsplit(".", 1)[0]
-            st.download_button(
-                "Download CSV File",
-                data=processed_data.to_csv(index=False),
-                file_name=f"{processed_name}_processed.csv",
-                mime="text/csv",
-                on_click=lambda: activity_log.record(user_email, "processed_csv_downloaded"),
-            )
+        render_section_downloads("overview", "Overview")
 
     # Tab 2: Visualizations
     with tab2:
@@ -370,6 +809,7 @@ if data_loader.get_data() is not None:
                 scatter_fig = visualizer.create_scatter_plot(x_col, y_col)
                 if scatter_fig:
                     st.pyplot(scatter_fig)
+        render_section_downloads("visualizations", "Visualizations")
 
     # Tab 3: Statistical Analysis
     with tab3:
@@ -452,6 +892,7 @@ if data_loader.get_data() is not None:
                 st.dataframe(outlier_summary)
             else:
                 st.info("No outliers found using the selected method.")
+        render_section_downloads("statistics", "Statistical Analysis")
 
     # EDA & Data Quality: combine supplied workbench and analyzer modules.
     with tab_eda:
@@ -515,7 +956,7 @@ if data_loader.get_data() is not None:
                 if st.button("Reset to uploaded data", key="reset_uploaded_data", disabled=not st.session_state.get("transformations")):
                     data_loader.reset_data()
                     activity_log.record(user_email, "data_reset_to_upload")
-                    st.rerun()
+        render_section_downloads("eda", "EDA & Data Quality")
 
     # Advanced Visualizations use the supplied AdvancedVisualizer class.
     with tab_advanced_viz:
@@ -559,7 +1000,7 @@ if data_loader.get_data() is not None:
         if fig is not None:
             st.pyplot(fig, use_container_width=True)
             plt.close(fig)
-            activity_log.record(user_email, "advanced_visualization_opened", {"chart": chart})
+        render_section_downloads("advanced_viz", "Advanced Visualizations")
 
     # Advanced statistical tests and pairwise analysis.
     with tab_advanced_stats:
@@ -593,7 +1034,7 @@ if data_loader.get_data() is not None:
         if data_loader.get_numeric_columns():
             st.subheader("Univariate detail")
             selected = st.selectbox("Numeric variable", data_loader.get_numeric_columns(), key="advanced_univariate")
-            st.json(__import__("json").loads(__import__("json").dumps(advanced_statistical_analyzer.get_univariate_analysis(selected), default=str)))
+        render_section_downloads("advanced_stats", "Advanced Statistics")
 
     # Time-series tools use copy-safe analyzer and explicit profile helper.
     with tab_time:
@@ -650,6 +1091,7 @@ if data_loader.get_data() is not None:
                 st.warning(analysis.get("error", "Could not analyze these columns."))
         else:
             st.info("Upload a CSV containing a date/time column and at least one numeric column to use time-series analysis.")
+        render_section_downloads("time_series", "Time Series")
 
     # Tab 5: Gemini AI Analysis
     with tab5:
@@ -690,6 +1132,7 @@ if data_loader.get_data() is not None:
                     )
 
                     if response:
+                        st.session_state["_latest_gemini_response"] = response
                         # Display response
                         st.markdown(
                             '<h3 class="sub-header">AI Analysis Results</h3>',
@@ -697,15 +1140,58 @@ if data_loader.get_data() is not None:
                         )
                         st.markdown(response)
 
-                        # Save analysis to file option
-                        st.download_button(
-                            label="Download Analysis",
-                            data=response,
-                            file_name="gemini_analysis.txt",
-                            mime="text/plain",
-                            on_click=lambda: activity_log.record(user_email, "gemini_analysis_downloaded"),
-                        )
+        ai_resp = st.session_state.get("_latest_gemini_response")
+        render_section_downloads("gemini", "Gemini AI Analysis")
 
-else:
-    st.markdown("""<div class="studio-hero"><div class="studio-kicker">✦ &nbsp; YOUR DATA, IN FOCUS</div><div class="studio-title">Make sense of<br>your data.</div><div class="studio-copy">Turn a CSV into clear answers. Explore patterns, check data quality, and uncover insights in one place.</div><div class="studio-grid"><div class="studio-card">▦ &nbsp; Quick overview<small>Know what’s in your data</small></div><div class="studio-card">▥ &nbsp; Visual patterns<small>See trends at a glance</small></div><div class="studio-card">⌗ &nbsp; Deeper analysis<small>Statistics and data quality</small></div><div class="studio-card">✦ &nbsp; AI assistance<small>Ask better questions</small></div></div></div>""",unsafe_allow_html=True)
-    st.caption("Start with a CSV — use the upload panel on the left to begin your analysis.")
+    # Final Master Comprehensive Download Banner (Below All Tabs)
+    st.markdown("---")
+    base_name = (data_loader.get_filename() or "data.csv").rsplit(".", 1)[0]
+    st.markdown(f"""<div class="studio-hero" style="margin-top:20px; padding:28px;">
+        <div class="studio-kicker">COMPLETE MASTER EXPORT</div>
+        <div class="studio-title" style="font-size:2.2rem; margin:16px 0 10px;">Download Whole Analysis</div>
+        <div class="studio-copy">One-click download of the complete end-to-end analysis for <b>{data_loader.get_filename()}</b> covering all 8 analytical sections (Overview, EDA & Quality, Visualizations, Advanced Visualizations, Statistical Analysis, Advanced Statistics, Time Series, and Gemini AI).</div>
+    </div>""", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+    f_col1, f_col2 = st.columns(2)
+    with f_col1:
+        final_master_pdf = generate_pdf_report(
+            data_loader=data_loader,
+            data_profiler=data_profiler,
+            data_quality_analyzer=data_quality_analyzer,
+            statistical_analyzer=statistical_analyzer,
+            gemini_analysis_text=st.session_state.get("_latest_gemini_response"),
+            automated_insights=automated_insights,
+            advanced_visualizer=advanced_visualizer,
+            time_series_analyzer=time_series_analyzer,
+            section="all",
+        )
+        st.download_button(
+            label="Download Whole Analysis (PDF)",
+            data=final_master_pdf,
+            file_name=f"{base_name}_master_analysis_report.pdf",
+            mime="application/pdf",
+            key="bottom_master_pdf",
+            use_container_width=True,
+            on_click=lambda: activity_log.record(user_email, "master_pdf_downloaded"),
+        )
+    with f_col2:
+        final_archive_zip = generate_full_archive_zip(
+            data_loader=data_loader,
+            data_profiler=data_profiler,
+            data_quality_analyzer=data_quality_analyzer,
+            statistical_analyzer=statistical_analyzer,
+            gemini_analysis_text=st.session_state.get("_latest_gemini_response"),
+            automated_insights=automated_insights,
+            advanced_visualizer=advanced_visualizer,
+            time_series_analyzer=time_series_analyzer,
+        )
+        st.download_button(
+            label="Download Complete Archive (ZIP)",
+            data=final_archive_zip,
+            file_name=f"{base_name}_complete_analysis_archive.zip",
+            mime="application/zip",
+            key="bottom_master_zip",
+            use_container_width=True,
+            on_click=lambda: activity_log.record(user_email, "archive_zip_downloaded"),
+        )
+
