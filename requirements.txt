@@ -6,3 +6,4 @@ scikit-learn
 google-generativeai
 scipy
 statsmodels
+reportlab
