@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 import base64
+import google.generativeai as genai
 
 # Import modules
 from modules.input_module import DataLoader
@@ -379,6 +380,7 @@ div[data-testid=stButton] button:hover, div[data-testid=stDownloadButton] button
 </style>''',unsafe_allow_html=True)
 
 # Require Google sign-in before rendering any analyzer functionality.
+auth_config = st.secrets.get("auth")
 activity_log = ActivityLog()
 
 def begin_google_signin():
@@ -626,6 +628,10 @@ if data_loader.get_data() is not None and st.session_state.get("analysis_given",
         "Time Series",
         "Gemini AI Analysis",
     ]
+    # Initialize shared columns before tab-specific blocks; tabs can render independently.
+    numeric_cols = data_loader.get_numeric_columns()
+    categorical_cols = data_loader.get_categorical_columns()
+
     tab1, tab_eda, tab2, tab_advanced_viz, tab3, tab_advanced_stats, tab_time, tab5 = st.tabs(
         analysis_tab_labels, key="analysis_tabs", on_change="rerun"
     )
@@ -674,10 +680,6 @@ if data_loader.get_data() is not None and st.session_state.get("analysis_given",
             st.markdown(
                 '<h2 class="sub-header">Data Visualizations</h2>', unsafe_allow_html=True
             )
-
-            # Get column lists
-            numeric_cols = data_loader.get_numeric_columns()
-            categorical_cols = data_loader.get_categorical_columns()
 
             # Distribution plots for numeric columns
             if len(numeric_cols) > 0:
