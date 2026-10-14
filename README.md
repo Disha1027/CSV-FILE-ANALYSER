@@ -1,6 +1,6 @@
 # CSV File Analyser
 
-CSV File Analyser is a web application for exploring CSV data. A user signs in with Google, uploads a CSV, and uses the workspace to inspect data quality, create charts, calculate statistics, explore time-based data, and optionally request written insights from Google Gemini.
+CSV File Analyser is a web application for exploring CSV data. Users sign in with Google, upload a CSV, and use the workspace to inspect data quality, create charts, calculate statistics, explore time-based data, and optionally request written insights from Google Gemini.
 
 The application is built with Python and Streamlit. Its main entry point is `app.py`; reusable loading, analysis, visualization, and activity logging code lives under `modules/`.
 
@@ -32,7 +32,7 @@ Browser → Google sign-in → Streamlit app → CSV loader → Analysis modules
                                                        └→ Gemini (optional)
 ```
 
-1. The visitor signs in with Google.
+1. The visitor signs in with Google OAuth.
 2. The user uploads a `.csv` file in the sidebar.
 3. The app reads the file into a Pandas DataFrame, which is a table of rows and columns.
 4. The user chooses an analysis tab and selects columns or options.
@@ -43,13 +43,17 @@ The uploaded and transformed tables are kept in the user's Streamlit session whi
 
 ## Features
 
-### Google sign-in and user history
+### Authentication and user history
 
-- Google OAuth sign-in is required before analyzer functionality is shown.
+- Sign in securely with Google OAuth.
 - The sidebar shows the signed-in account and its previous recorded login time.
-- Users can sign out and view their own activity history.
+- Sessions sign out automatically after 10 seconds without activity. Users can also sign out manually and view their own activity history.
 - An administrator email allowlist can be configured to let designated owners review all recorded activity.
+### Batch PDF reports
 
+- Select several CSV files in the sidebar to generate one PDF analysis report per file.
+- Download the reports together as a ZIP. A manifest lists files that could not be processed.
+- Gemini analysis is optional; when selected, summaries and sample rows are sent to Google.
 ### CSV upload and overview
 
 - Upload CSV files through the Streamlit sidebar.
@@ -194,7 +198,7 @@ Open PowerShell in the project folder.
    streamlit run app.py --server.port 8501
    ```
 
-7. Open [http://localhost:8501](http://localhost:8501) and sign in with an account permitted by the OAuth consent-screen settings.
+7. Open [http://localhost:8501](http://localhost:8501) and sign in with a Google account permitted by the OAuth consent-screen settings.
 
 ### Local secrets template
 
@@ -285,7 +289,7 @@ The SQLite file is excluded from Git. On a host with an ephemeral filesystem, lo
 - The uploader accepts CSV files; it is not a general Excel or database importer.
 - Different tools require different column types. For example, time-series features need date/time and numeric data.
 - Gemini output is generated text and should be checked before it is used to make decisions.
-- The app's Google sign-in is OAuth-based; the current project does not provide its own email/password account database.
+- Google manages account passwords and password recovery.
 - The activity log uses SQLite. Durable production audit storage needs a persistent disk or database configuration.
 - The active interface does not contain the old ML Insights tab, even though legacy ML-related files remain in the repository.
 
@@ -293,8 +297,7 @@ The SQLite file is excluded from Git. On a host with an ephemeral filesystem, lo
 
 ### “Google sign-in is not configured yet”
 
-Check that the app can read a valid `secrets.toml` containing an `[auth]` section. On Render, check the secret-file name and the Start Command that copies it into `.streamlit/`.
-
+Check that the app can read a valid secrets.toml containing an [auth] section. On Render, check the secret-file name and the Start Command that copies it into .streamlit/.
 ### Google says `invalid_client` or the OAuth client was deleted
 
 Use an active OAuth client. Confirm that the client ID and client secret belong together, and that the redirect URI in Google Cloud exactly matches the app URL and `/oauth2callback` path.

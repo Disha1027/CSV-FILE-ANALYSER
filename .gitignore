@@ -3,3 +3,4 @@ __pycache__/
 .pytest_cache/
 .streamlit/secrets.toml
 .streamlit/activity_log.sqlite3*
+.streamlit/email_auth.sqlite3*

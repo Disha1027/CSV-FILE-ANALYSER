@@ -17,7 +17,8 @@ from modules.data_analysis_module import (
 )
 from modules.processing_module import GeminiAnalyzer
 from modules.activity_log import ActivityLog
-from modules.reporting_module import generate_pdf_report, generate_full_archive_zip, generate_section_archive_zip
+from modules.inactivity_monitor import inactivity_monitor
+from modules.reporting_module import generate_pdf_report, generate_full_archive_zip, generate_section_archive_zip, generate_batch_report_zip
 
 # Set page configuration
 st.set_page_config(
@@ -356,8 +357,8 @@ div[data-testid="stAlert"] [data-testid="stMarkdownContainer"] p {
 .login-left{min-height:78vh;padding:42px 7%;border-radius:26px 0 0 26px;background:linear-gradient(135deg,#a9eee4,#70d0cd);color:#286f78}
 .login-right{min-height:0;padding:52px 9% 12px;border-radius:0 26px 0 0;background:#fbfefe}
 div[data-testid=stHorizontalBlock]>div[data-testid=column]:nth-child(2){background:#fbfefe;border-radius:0 26px 26px 0}
-div[data-testid=stButton] button, div[data-testid=stDownloadButton] button{background:#55bdb4!important;color:white!important;border:0!important;border-radius:14px;padding:.8rem 1.2rem;box-shadow:0 8px 20px #55bdb433}
-div[data-testid=stButton] button:hover, div[data-testid=stDownloadButton] button:hover{background:#43aaa2!important;color:white!important}
+div[data-testid=stButton] button, div[data-testid=stDownloadButton] button, div[data-testid=stFormSubmitButton] button{background:#55bdb4!important;color:white!important;border:0!important;border-radius:14px;padding:.8rem 1.2rem;box-shadow:0 8px 20px #55bdb433}
+div[data-testid=stButton] button:hover, div[data-testid=stDownloadButton] button:hover, div[data-testid=stFormSubmitButton] button:hover{background:#43aaa2!important;color:white!important}
 .login-brand{font-size:1.1rem;font-weight:850;letter-spacing:.04em}
 .login-chart{height:185px;margin:26px auto;padding:18px;border:1px solid #ffffffbd;border-radius:22px;background:#ffffff66;display:flex;align-items:end;justify-content:space-around}
 .login-chart i{display:block;width:13%;border-radius:7px 7px 0 0;background:#f4c1a8}
@@ -379,30 +380,48 @@ div[data-testid=stButton] button:hover, div[data-testid=stDownloadButton] button
 .studio-card small{display:block;color:#929bad;font-weight:400;margin-top:10px}
 </style>''',unsafe_allow_html=True)
 
-# Require Google sign-in before rendering any analyzer functionality.
-auth_config = st.secrets.get("auth")
+def get_secret_section(name):
+    try:
+        value = st.secrets.get(name, {})
+        return dict(value) if value else {}
+    except Exception:
+        return {}
+
+auth_config = get_secret_section("auth")
+google_auth_ready = (
+    all(str(auth_config.get(key, "")).strip() for key in
+        ("redirect_uri", "cookie_secret", "client_id", "client_secret", "server_metadata_url"))
+    and not any("replace-with" in str(value).lower() for value in auth_config.values())
+)
+activity_config = get_secret_section("activity")
 activity_log = ActivityLog()
 
 def begin_google_signin():
     activity_log.record(None, "login_started")
     st.login()
 
-auth_config = st.secrets.get("auth")
-if not auth_config:
-    st.title("Sign-in setup required")
-    st.error("Google sign-in is not configured yet. Follow the setup steps in README.md.")
-    st.stop()
+try:
+    google_logged_in = bool(st.user.is_logged_in)
+except Exception:
+    google_logged_in = False
 
-if not st.user.is_logged_in:
-    left,right=st.columns([1.35,.9],gap="small")
+is_authenticated = google_logged_in
+
+if not is_authenticated:
+    if st.query_params.get("logout_notice") == "inactive":
+        st.warning("You were signed out because you were inactive for too long.")
+        del st.query_params["logout_notice"]
+    left, right = st.columns([1.35, .9], gap="small")
     with left:
-        st.markdown('''<div class="login-left"><div class="login-brand">CSV FILE ANALYSER</div><div class="login-chart"><i></i><i></i><i></i><i></i><i></i><i></i></div><h1>CSV FILE ANALYSER</h1><p class='login-description'>In fulfilment of the requirements for the course IT303 Software Engineering.</p><div class='login-details'><div><b>Team members</b><ol><li>Apurv Rohom</li><li>Disha A</li><li>Pranathi Udaya Kumar</li></ol></div><div><b>Under the guidance of</b><p>Prof. Jaidhar C D</p><b>Course</b><p>IT303 Software Engineering</p></div></div><small class='login-copyright'>Copyright © 2026 CSV File Analyser</small></div>''',unsafe_allow_html=True)
+        st.markdown('''<div class="login-left"><div class="login-brand">CSV FILE ANALYSER</div><div class="login-chart"><i></i><i></i><i></i><i></i><i></i><i></i></div><h1>CSV FILE ANALYSER</h1><p class='login-description'>In fulfilment of the requirements for the course IT303 Software Engineering.</p><div class='login-details'><div><b>Team members</b><ol><li>Apurv Rohom</li><li>Disha A</li><li>Pranathi Udaya Kumar</li></ol></div><div><b>Under the guidance of</b><p>Prof. Jaidhar C D</p><b>Course</b><p>IT303 Software Engineering</p></div></div><small class='login-copyright'>Copyright © 2026 CSV File Analyser</small></div>''', unsafe_allow_html=True)
     with right:
-        st.markdown('''<div class="login-right"><small style="color:#58aaa9;letter-spacing:.2em;font-weight:bold">CSV DATA ANALYSER</small><h1>Welcome back</h1><p>Continue to your workspace and start exploring your data.</p></div>''',unsafe_allow_html=True)
-        st.button("Sign in",on_click=begin_google_signin,type="primary")
+        st.markdown('''<div class="login-right"><small style="color:#58aaa9;letter-spacing:.2em;font-weight:bold">CSV DATA ANALYSER</small><h1>Welcome back</h1><p>Continue to your workspace and start exploring your data.</p></div>''', unsafe_allow_html=True)
+        if google_auth_ready:
+            st.button("Sign in with Google", on_click=begin_google_signin, use_container_width=True)
+        else:
+            st.caption("Google sign-in is not configured for this deployment.")
     st.stop()
-
-# Record a successful Google-authenticated session once, then retain its prior login.
+# Record a successful session once and preserve the previous login for display.
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -428,8 +447,21 @@ def sign_out_and_record():
     activity_log.record(user_email, "logout")
     st.session_state.pop("_activity_logged_user", None)
     st.session_state.pop("_activity_previous_login", None)
-    st.logout()
+    if google_logged_in:
+        st.logout()
+    else:
+        st.rerun()
 
+# Preserve the existing demo timeout: log out after 10 seconds without browser activity.
+if inactivity_monitor(timeout_seconds=10, key=f"idle_monitor_{user_email}"):
+    activity_log.record(user_email, "logout_inactivity", {"timeout_seconds": 10})
+    st.query_params["logout_notice"] = "inactive"
+    st.session_state.pop("_activity_logged_user", None)
+    st.session_state.pop("_activity_previous_login", None)
+    if google_logged_in:
+        st.logout()
+    else:
+        st.rerun()
 # Initialize modules
 data_loader = DataLoader()
 visualizer = Visualizer(data_loader)
@@ -445,10 +477,10 @@ gemini_analyzer = GeminiAnalyzer(data_loader)
 # Main header
 # Sidebar for file upload and settings
 with st.sidebar:
-    st.caption(f"Signed in as {st.user.get('email', st.user.get('name', 'Google user'))}")
+    st.caption(f"Signed in as {user_email}")
     st.caption(f"Last login: {format_login_time(previous_login)}")
     st.button("Sign out", on_click=sign_out_and_record)
-    admin_emails = st.secrets.get("activity", {}).get("admin_emails", [])
+    admin_emails = activity_config.get("admin_emails", [])
     is_activity_admin = user_email in {str(email).strip().lower() for email in admin_emails}
     old_activity_expander_state = st.session_state.get("_activity_expander_open", False)
     with st.expander("Activity history", key="activity_history_expander", on_change="rerun"):
@@ -524,6 +556,65 @@ with st.sidebar:
                     activity_log.record(user_email, "csv_upload_failed")
                     st.session_state["_activity_last_failed_upload"] = upload_event_id
 
+    # Create individual analysis PDFs for several CSV files at once.
+    st.markdown("---")
+    st.subheader("Batch PDF Reports")
+    batch_files = st.file_uploader(
+        "Choose multiple CSV files",
+        type=["csv"],
+        accept_multiple_files=True,
+        key="batch_csv_upload",
+        help="Generate one analysis PDF per CSV and download them together as a ZIP.",
+    )
+    if batch_files:
+        st.caption(f"{len(batch_files)} file(s) selected")
+        batch_source = tuple((getattr(f, "file_id", ""), f.name, f.size) for f in batch_files)
+        if st.session_state.get("_batch_report_source") != batch_source:
+            st.session_state["_batch_report_source"] = batch_source
+            st.session_state.pop("_prepared_batch_report_zip", None)
+            st.session_state.pop("_batch_report_results", None)
+        batch_gemini_key = st.session_state.get("gemini_api_key", "")
+        include_batch_gemini = False
+        if batch_gemini_key:
+            include_batch_gemini = st.checkbox(
+                "Include Gemini analysis for each file (sends dataset summaries and sample rows to Google)",
+                key="batch_include_gemini",
+            )
+        if st.button("Generate reports for all files", key="generate_batch_reports", use_container_width=True):
+            with st.spinner("Generating a PDF report for each CSV..."):
+                batch_zip, batch_results = generate_batch_report_zip(
+                    batch_files,
+                    gemini_api_key=batch_gemini_key if include_batch_gemini else None,
+                )
+            st.session_state["_prepared_batch_report_zip"] = batch_zip
+            st.session_state["_batch_report_results"] = batch_results
+            activity_log.record(
+                user_email,
+                "batch_reports_generated",
+                {"files": len(batch_results), "succeeded": sum(item["status"] == "success" for item in batch_results)},
+            )
+        batch_results = st.session_state.get("_batch_report_results")
+        batch_zip = st.session_state.get("_prepared_batch_report_zip")
+        if batch_results:
+            succeeded = sum(item["status"] == "success" for item in batch_results)
+            st.caption(f"Generated {succeeded} of {len(batch_results)} reports. The ZIP includes a manifest of any failures.")
+            st.dataframe(
+                pd.DataFrame([
+                    {"File": item["file"], "Status": item["status"].upper(), "Details": item.get("report", item.get("error", ""))}
+                    for item in batch_results
+                ]),
+                hide_index=True,
+                use_container_width=True,
+            )
+        if batch_zip:
+            st.download_button(
+                "Download all reports (ZIP)",
+                data=batch_zip,
+                file_name="csv_batch_analysis_reports.zip",
+                mime="application/zip",
+                key="download_batch_reports_zip",
+                use_container_width=True,
+            )
     # Analyse button directly in the sidebar
     analyse_btn = st.button("Analyse", type="primary", key="sidebar_analyse_btn", use_container_width=True)
     if analyse_btn:
