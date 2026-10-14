@@ -99,6 +99,23 @@ class Visualizer:
             
             # Create bar plot
             sns.barplot(x=value_counts.index, y=value_counts.values, ax=ax)
+
+            # For tightly clustered category counts, zoom the y-axis to make
+            # small differences visible. Keep a zero baseline when the counts
+            # vary more widely, where truncation could be misleading.
+            if len(value_counts) >= 2:
+                low = float(value_counts.min())
+                high = float(value_counts.max())
+                if low > 0 and (high - low) / high <= 0.25:
+                    magnitude = 10 ** np.floor(np.log10(high))
+                    # Use fine steps for small counts (10 -> 8), and rounded
+                    # tens for larger counts (42 -> 30), as in the chart example.
+                    interval = magnitude if low >= 20 else max(1.0, magnitude / 5)
+                    baseline = np.floor((low * 0.8) / interval) * interval
+                    if 0 < baseline < low:
+                        ax.set_ylim(bottom=baseline)
+                        ax.set_ylabel(f'Count (truncated axis; starts at {baseline:g})')
+
             plt.xticks(rotation=45, ha='right')
             plt.tight_layout()
             
