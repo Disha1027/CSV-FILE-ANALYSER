@@ -453,8 +453,8 @@ def sign_out_and_record():
         st.rerun()
 
 # Preserve the existing demo timeout: log out after 10 seconds without browser activity.
-if inactivity_monitor(timeout_seconds=10, key=f"idle_monitor_{user_email}"):
-    activity_log.record(user_email, "logout_inactivity", {"timeout_seconds": 10})
+if inactivity_monitor(timeout_seconds=1800, key=f"idle_monitor_{user_email}"):
+    activity_log.record(user_email, "logout_inactivity", {"timeout_seconds": 1800})
     st.query_params["logout_notice"] = "inactive"
     st.session_state.pop("_activity_logged_user", None)
     st.session_state.pop("_activity_previous_login", None)
